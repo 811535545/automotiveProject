@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.oem.car.app-mergeDebugResources-40:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "D:\\.gradle\\caches\\transforms-3\\95f1b35aeabd851bb2e9bac5f583a00f\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}
