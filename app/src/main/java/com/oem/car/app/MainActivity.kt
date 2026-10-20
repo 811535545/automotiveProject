@@ -12,6 +12,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.oem.car.core.designsystem.CarButton
@@ -35,26 +36,21 @@ class MainActivity : ComponentActivity() {
             CarTheme {
                 MainCockpitNavigationHost()
             }
+            title = "aaa"
         }
     }
 }
 
-
 enum class CockpitTab(val title: String) {
-    DASHBOARD("中控"),
-    CLUSTER("仪表"),
-    NAVIGATION("导航"),
-    CLIMATE("空调"),
-    MEDIA("影音"),
-    PHONE("电话"),
-    CONNECTED("互联"),
-    ENERGY("能量"),
-    HEALTH("健康"),
-    SETTINGS("设置")
+    DASHBOARD("中控"), CLUSTER("仪表"), NAVIGATION("导航"), CLIMATE("空调"), MEDIA("影音"), PHONE("电话"), CONNECTED(
+        "互联"
+    ),
+    ENERGY("能量"), HEALTH("健康"), SETTINGS("设置")
 }
 
 @Composable
 fun MainCockpitNavigationHost() {
+
     var selectedTab by remember { mutableStateOf(CockpitTab.DASHBOARD) }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -70,7 +66,28 @@ fun MainCockpitNavigationHost() {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🚘 AAOS Cockpit", color = Color(0xFF00E5FF), fontSize = 16.sp)
+
+                //Text("🚘 AAOS Cockpit", color = Color(0xFF00E5FF), fontSize = 16.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp) // 控制图标与文字的间距
+                ) {
+
+                    Icon(
+                        painter = painterResource(id = R.mipmap.ic_car), // 你的 Vector Drawable 图标
+                        contentDescription = "Car Icon",
+                        tint = Color(0xFF00E5FF), // 统一的青蓝色调
+                        modifier = Modifier.size(20.dp) // 控制图标大小
+                    )
+
+                    Text(
+                        text = "AAOS Cockpit",
+                        color = Color(0xFF00E5FF),
+                        fontSize = 16.sp
+                    )
+
+                }
+
                 Spacer(modifier = Modifier.width(8.dp))
 
                 CockpitTab.entries.forEach { tab ->
@@ -78,12 +95,15 @@ fun MainCockpitNavigationHost() {
                     CarButton(
                         text = tab.title,
                         onClick = { selectedTab = tab },
-                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF263238)
+                        containerColor = if (isSelected) MaterialTheme.colorScheme.primary else Color(
+                            0xFF263238
+                        )
                     )
                 }
+
             }
 
-            // Main Screen View Area
+            //Main Screen View Area
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
