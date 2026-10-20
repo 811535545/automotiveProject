@@ -1,5 +1,6 @@
 package com.oem.car.core.data
 
+import android.content.Context
 import com.oem.car.core.model.*
 import kotlinx.coroutines.flow.StateFlow
 
@@ -22,7 +23,7 @@ interface VehicleRepository {
     val vehicleHealthState: StateFlow<VehicleHealthState>
     val navigationPresets: List<NavigationDestination>
 
-    fun initialize()
+    fun initialize(context: Context)
     fun injectSpeed(speed: Float)
     fun injectGear(gear: VehicleGear)
     fun injectPower(powerState: PowerState)

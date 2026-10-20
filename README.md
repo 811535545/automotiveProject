@@ -2,7 +2,7 @@
 
 > 本文档对应**仓库根目录**的实际工程（`E:\gitHub\automotiveProject`），Gradle 的 `rootProject.name` 仍为 `CommercialCarApp`；`CommercialCarApp/` 子目录是无源码的迁移残留（仅构建/IDE 缓存），不是源码工程。
 >
-> **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号、Binder 服务、数字钥匙、T-BOX、OTA、ADAS、DMS 均为**进程内仿真**，不连接真车、不连接云端，也不代表量产合规实现。
+> **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号域已拆成独立 `:vehicle` 进程，通过 AIDL/Binder 跨进程通信，并实测服务进程被杀后 3 秒自动重连；其余业务域（数字钥匙、T-BOX、OTA、ADAS、DMS、导航等）仍在主进程内仿真。不连接真车、不连接云端，也不代表量产合规实现。
 
 ---
 
@@ -13,17 +13,18 @@
 - 用 Kotlin + Jetpack Compose 实现一套横屏座舱 HMI，包含 10 个 Tab：中控、仪表、导航、空调、影音、电话、互联、能量、健康、设置。
 - 用 `app / feature / core` 三层模块化组织代码，能力下沉到 `core`，页面隔离在 `feature`。
 - 用 `StateFlow` 做单向数据流，用 `VehicleRepository` 作为统一数据门面。
-- 用 AIDL + `RemoteCallbackList` + `DeathRecipient` 演示车辆服务的接口形态（当前为同进程模拟）。
+- 用 AIDL + 独立 `:vehicle` 进程 + `bindService` + `RemoteCallbackList` + `DeathRecipient` 实现车辆服务的跨进程链路，并支持服务进程崩溃后的自动重连与状态快照回推。
+- 客户端模块只依赖 AIDL 契约，服务端实现放在 `:core:vehicle`，由 `VehicleCoreService` 在 `:vehicle` 进程中托管。
 - 补齐 4 个扩展域的仿真闭环：数字钥匙、T-BOX/车云/OTA、ADAS 感知、DMS/多账户 Profile。
 - 补齐 4 个座舱核心域的仿真闭环：导航（路线/逐段引导/仪表联动）、电话（蓝牙/拨号/来电/计时）、能量（SOC/充电/预约）、健康（胎压/自检/DTC 扫描）。
 
 ### 1.2 这个项目明确没有做
 
 - 没有接入 `android.car`、CarService、VHAL 或真实车辆总线。
-- 没有独立服务进程，`CarCoreDaemon` 与 App 在同一个进程。
+- 车辆服务虽有独立 `:vehicle` 进程，但仍与 App 在**同一 APK、同一 UID** 内，`exported=false`，没有权限校验/AIDL 版本管理，也不是 AAOS 标准 `CarService`/VHAL。
 - 没有 CarSystemUI、Launcher、多显示屏、副驾/后排 RSE。
 - 没有真实数字钥匙协议（CCC 3.0 / UWB / BLE / NFC / SE）、真实 T-BOX 云通道、真实 OTA、真实 ADAS 感知与 3D SR 渲染。
-- 没有真实地图引擎、蓝牙 HFP/PBAP 链路、BMS/充电桩协议、UDS/DoIP 诊断链路；导航、电话、能量、健康四个页面均为**进程内状态仿真**。
+- 没有真实地图引擎、蓝牙 HFP/PBAP 链路、BMS/充电桩协议、UDS/DoIP 诊断链路；导航、电话、能量、健康四个页面均为**主进程内状态仿真**。
 - 没有测试体系、CI、签名发布、功能安全/信息安全流程。
 
 因此：**它适合做架构演示、AAOS 学习、面试项目；不能直接作为量产座舱交付。**
@@ -40,6 +41,7 @@
 | JDK | 17 |
 | Android | compileSdk 34 / minSdk 28 / targetSdk 34 |
 | 架构 | 多模块 + Repository + StateFlow + 单向数据流 |
+| IPC | AIDL + `bindService` + `RemoteCallbackList`（仅车辆域，主进程 ↔ `:vehicle`） |
 | 并发 | kotlinx-coroutines-core 1.7.3 |
 | 屏幕 | 单 Activity、横屏、10 个 Tab |
 
@@ -60,8 +62,8 @@ automotiveProject/
 │   ├── model/                        # 车辆信号、档位、电源、座舱与扩展域数据模型
 │   ├── power/                        # 电源状态机（STR / Garage / 关机预备）
 │   ├── uxrestrictions/               # 行车防分心策略（演示阈值）
-│   ├── vehicle/                      # CarCoreDaemon：AIDL Stub 仿真服务端
-│   ├── vehicle-service/              # 连接管理 + AIDL 回调转 StateFlow
+│   ├── vehicle/                      # CarCoreDaemon（AIDL Stub）+ VehicleCoreService（:vehicle 进程）
+│   ├── vehicle-service/              # 客户端 bindService/死亡监听/AIDL 回调转 StateFlow（只依赖 AIDL）
 │   ├── digitalkey/                   # 数字钥匙仿真（区域/技术/门锁/启动授权）
 │   ├── telematics/                   # T-BOX/车云/OTA 仿真
 │   ├── adas/                         # ADAS/感知目标仿真
@@ -70,7 +72,7 @@ automotiveProject/
 │   ├── phone/                        # 【新增】蓝牙电话与通话状态机仿真
 │   ├── energy/                       # 【新增】电池/充电/预约仿真
 │   └── health/                       # 【新增】健康自检/胎压/DTC 仿真
-└── feature/
+├── feature/
     ├── dashboard/                    # 中控仪表 + 总线注入 Injector
     ├── cluster/                      # 液晶仪表（当前是同一 Activity 的 Tab）
     ├── navigation/                   # 【新增】导航：仿真地图 + 路线卡片
@@ -82,6 +84,8 @@ automotiveProject/
     ├── health/                        # 【新增】健康：胎压/自检/DTC UI
     ├── settings/                      # 驾驶模式 + ADAS 静态展示
     └── voice/                         # 语音助手 PTT 浮层
+└── scripts/
+    └── verify_ipc.sh                  # 跨进程验证：只杀 :vehicle，断言 3 秒重连与 BinderProxy
 ```
 
 ### 3.1 模块职责与成熟度
@@ -89,9 +93,9 @@ automotiveProject/
 | 模块 | 职责 | 成熟度 |
 | :--- | :--- | :--- |
 | `:app` | `MainActivity`、10 个 Tab、`VoiceAssistantOverlay` 全局浮层 | 可用 |
-| `:core:aidl` | 车辆服务契约，`oneway` 异步回调 | 完整（但当前同进程） |
-| `:core:vehicle` | `CarCoreDaemon` 模拟服务端，维护 `RemoteCallbackList` | 仿真 |
-| `:core:vehicle-service` | 连接、死亡监听、注入代理、AIDL 回调转 `StateFlow` | 仿真 |
+| `:core:aidl` | 车辆服务契约，`oneway` 异步回调 | 完整（车辆域契约） |
+| `:core:vehicle` | `CarCoreDaemon` + `VehicleCoreService`，运行在 `:vehicle` 进程 | 仿真（跨进程服务端） |
+| `:core:vehicle-service` | `bindService`、死亡监听、注入代理、AIDL 回调转 `StateFlow` | 仿真（跨进程客户端，只依赖 AIDL） |
 | `:core:data` | 聚合所有域状态，暴露统一 `VehicleRepository` | 可用 |
 | `:core:uxrestrictions` | 按车速/档位计算防分心状态 | 演示规则 |
 | `:core:power` | 电源状态迁移与监听器 | 骨架 |
@@ -120,52 +124,69 @@ app
  ├── feature:dashboard / cluster / navigation / climate / media / phone
  │   / connected / energy / health / settings / voice
  │     ├── core:data
- │     │     ├── core:vehicle-service ──► core:vehicle ──► core:aidl
+ │     │     ├── core:vehicle-service ──► core:aidl
  │     │     ├── core:uxrestrictions / power / audio
  │     │     ├── core:digitalkey / telematics / adas / account
  │     │     ├── core:navigation / phone / energy / health
  │     │     └── core:common / model
  │     └── core:designsystem / common / model
+ ├── core:vehicle ──► core:aidl        // 仅用于把服务实现打进同一 APK，由 :vehicle 进程加载
  ├── core:common / model
  └── core:designsystem ──► core:model
+
+运行时进程边界：
+主进程 com.oem.car.app（UI / Repository / 客户端）
+  └── bindService ──► :vehicle 进程 com.oem.car.app:vehicle（VehicleCoreService + CarCoreDaemon）
 ```
 
-补充：`:app` 也直接声明了 `:core:data` 依赖（与各 feature 相同，上图未重复展开）。
+补充：`:app` 也直接声明了 `:core:data` 依赖（与各 feature 相同，上图未重复展开）。`:app` 依赖 `:core:vehicle` 只是因为服务类必须打进同一个 APK；各 feature 不依赖服务端实现。
 
-已知依赖问题（保留现状，未在本轮重构）：`:core:vehicle-service` 为了直接拿 `CarCoreDaemon` 而依赖 `:core:vehicle`，客户端模块编译期依赖服务端实现，真实远程服务场景应只依赖 `:core:aidl`。
+`:core:vehicle-service` 只依赖 `:core:aidl`，不再编译期依赖 `:core:vehicle`；客户端看不到 `CarCoreDaemon` 类。
 
 ### 4.2 启动链路
 
 ```text
-MainActivity
-  └── DashboardScreen (默认 Tab)
-        └── DashboardViewModel.init
-              └── VehicleRepositoryImpl.initialize()   // AtomicBoolean 保证只执行一次
-                    ├── VehicleServiceConnectionManager.connect()
-                    │     ├── CarCoreDaemon.asBinder()  // 同进程，非 bindService
-                    │     └── registerListener(...)
-                    └── 常驻协程
-                          ├── speedSignal → CarUxRestrictionsEngine.evaluate()
-                          ├── gearSignal  → CarUxRestrictionsEngine.evaluate()
-                          └── powerSignal → CarPowerLifecycleManager.onPowerStateChanged()
+MainActivity.onCreate
+  └── VehicleRepositoryImpl.initialize(applicationContext)   // AtomicBoolean 保证只执行一次
+        ├── VehicleServiceConnectionManager.connect()
+        │     └── bindService(ComponentName(pkg, VehicleCoreService))
+        │           └── AMS 发现 android:process=":vehicle"
+        │                 ├── fork 出 :vehicle 进程
+        │                 ├── VehicleCoreService.onCreate() → CarCoreDaemon()
+        │                 └── onBind() 返回 daemon（Binder 服务端）
+        │           └── 主进程 onServiceConnected(binder)
+        │                 ├── linkToDeath(...)
+        │                 ├── Stub.asInterface(binder).registerListener(...)
+        │                 └── 服务端 syncStateTo() 回推状态快照
+        └── 常驻协程
+              ├── speedSignal → CarUxRestrictionsEngine.evaluate()
+              ├── gearSignal  → CarUxRestrictionsEngine.evaluate()
+              └── powerSignal → CarPowerLifecycleManager.onPowerStateChanged()
 ```
 
-### 4.3 车辆信号链路（仿真）
+### 4.3 车辆信号链路（跨进程）
 
 ```text
-Dashboard Injector
+Dashboard Injector（主进程）
   └── VehicleRepository.injectSpeed / injectGear / injectPower
-        └── VehicleServiceConnectionManager
-              └── CarCoreDaemon.injectMockSpeed / injectMockGear / injectMockPower
-                    ├── 更新内部 StateFlow
-                    ├── checkSafetyPolicy()          // 仅速度/档位注入触发
-                    └── dispatch(IVehicleEventListener)
-                          └── VehiclePropertyAdapter 更新 StateFlow
-                                └── VehicleRepository 暴露
-                                      └── Compose collectAsState()
+        └── VehicleServiceConnectionManager.withService { manager.injectMockXxx(...) }
+              └── IVehicleCoreManager.Proxy.transact(...) ── Binder IPC ──►
+                    CarCoreDaemon.injectMockSpeed / injectMockGear / injectMockPower（:vehicle 进程）
+                      ├── 更新内部 StateFlow
+                      ├── checkSafetyPolicy()          // 仅速度/档位注入触发
+                      └── dispatch(RemoteCallbackList)
+                            └── oneway onSpeedChanged / onGearChanged / ...
+                                  └── 客户端 Binder 线程
+                                        └── VehiclePropertyAdapter 更新 StateFlow
+                                              └── VehicleRepository 暴露
+                                                    └── Compose collectAsState()
 ```
 
-注意：`CarCoreDaemon.asBinder()` 返回的是同进程对象，`linkToDeath` 不会在真实进程崩溃时触发，因此“3 秒自动重连”目前只是代码演示。
+真实日志中服务端会打印 `callerPid=<主进程> myPid=<:vehicle 进程> thread=binder:<pid>_N`，可直接证明调用跨进程；客户端打印 `binder=android.os.BinderProxy localInterface=null`。
+
+`linkToDeath` 现在监听的是真实的 `:vehicle` 进程。杀掉该进程会触发 `Vehicle service binder died` → `scheduleReconnect in 3000ms` → 重新 `bindService`；主进程 PID 不变，服务端状态重置后通过注册快照回推。
+
+已实测的一个边界：`injectMockXxx` 先调用 `checkSafetyPolicy()` 再 `dispatch` 对应的速度/档位回调，因此防分心状态回调可能早于本次速度/档位回调到达客户端；UI 最终状态一致，但依赖回调顺序的代码需要额外注意。
 
 ### 4.4 扩展域链路
 
@@ -212,12 +233,67 @@ HealthScreen
 ```text
 Dashboard "方向盘 PTT"
   └── repository.triggerPtt()
-        ├── CarAudioManagerDelegate.triggerPttEvent()   // 本地音频状态：isPttActive=true
-        └── CarCoreDaemon.triggerPttVoice()             // 仅更新 event Flow，当前没有消费者
-VoiceAssistantOverlay（监听 isPttActive 状态，本身不触发 PTT）"完成对话"
+        ├── CarAudioManagerDelegate.triggerPttEvent()      // 主进程本地音频状态：isPttActive=true
+        └── VehicleServiceConnectionManager.triggerPtt()
+              └── IVehicleCoreManager.Proxy.triggerPttVoice() ── Binder ──►
+                    CarCoreDaemon._voiceTriggerEvent           // 仅更新时间戳，当前没有消费者
+VoiceAssistantOverlay（监听主进程 isPttActive 状态，本身不触发 PTT）"完成对话"
   └── repository.releasePtt()
-        └── CarAudioManagerDelegate.releasePttEvent()   // isPttActive=false，浮层关闭
+        └── CarAudioManagerDelegate.releasePttEvent()      // isPttActive=false，浮层关闭
 ```
+
+注意：PTT 只有“主进程 → 服务端”的单向调用，没有服务端回调；语音浮层的显示/关闭完全由主进程 `isPttActive` 驱动。
+
+### 4.7 跨进程实测：进程边界与死亡重连
+
+服务端和客户端在同一个 APK 内，但运行在两个进程：
+
+```text
+主进程 com.oem.car.app (pid=6080)
+  VehicleServiceConnectionManager
+    └── bindService(ComponentName(pkg, VehicleCoreService))
+          │  AMS 按 android:process=":vehicle" fork 新进程
+          ▼
+  :vehicle 进程 com.oem.car.app:vehicle (pid=6694)
+    VehicleCoreService.onCreate() → CarCoreDaemon()
+    VehicleCoreService.onBind()   → 返回 daemon（Binder 服务端）
+          │
+          ▼
+  主进程 onServiceConnected(binder)
+    ├── binder.queryLocalInterface(...) == null   // 拿到的是 BinderProxy
+    ├── binder.linkToDeath(...)                   // 服务进程死亡监听
+    └── IVehicleCoreManager.Stub.asInterface(binder).registerListener(...)
+          └── 服务端 syncStateTo() 立即回推 speed/gear/power/restricted 快照
+```
+
+一次实测（`scripts/verify_ipc.sh`，`am crash` 只杀 `:vehicle`）：
+
+```text
+# 杀之前
+main pid=6080, vehicle pid=6112
+
+# 杀掉 :vehicle 后，主进程不变
+W VehicleServiceConn: Service disconnected, waiting for system rebind
+E VehicleServiceConn: Vehicle service binder died
+W VehicleServiceConn: scheduleReconnect in 3000ms
+
+# 约 3.3s 后 AMS 重新拉起 :vehicle
+I VehicleCoreService: onCreate pid=6694
+I CarCoreDaemon: registerListener registered=true callerPid=6080 myPid=6694 thread=binder:6694_4
+I CarCoreDaemon: push snapshot speed=0.0 gear=1 power=0 restricted=false
+I VehicleServiceConn: Connected pid=6080 binder=android.os.BinderProxy localInterface=null bindCostMs=270
+```
+
+可确认的四件事：
+
+1. `callerPid=6080` 与 `myPid=6694` 不同，AIDL 方法确实跨进程执行。
+2. `binder=android.os.BinderProxy`、`localInterface=null`，客户端拿到的不是同进程对象。
+3. `linkToDeath` 真实触发，固定 3 秒后重新 `bindService`；主进程 PID 不变。
+4. 新服务进程是空状态，靠 `registerListener` 后的快照回推恢复 UI，而不是依赖旧进程内存。
+
+运行方式见 [9.4 跨进程验证](#94-跨进程验证)。
+
+> 注意：`:vehicle` 是本项目自定义的私有进程名，不是 AAOS 标准进程。AAOS 量产架构是 App → CarService（`com.android.car`）→ VHAL（`android.hardware.automotive.vehicle@V1-emulator-service`）→ CAN/以太网；本项目没有接入这条系统链路。
 
 ---
 
@@ -248,6 +324,7 @@ VoiceAssistantOverlay（监听 isPttActive 状态，本身不触发 PTT）"完�
 8. 点击“OTA 升级”，观察 CHECKING → DOWNLOADING → VERIFYING → APPLYING → SUCCESS。
 9. DMS 点击“人脸识别”后点击“应用个性化到座舱”，切到空调页确认主驾温度被改为偏好温度。
 10. 点击“方向盘 PTT”弹出语音浮层，点击“完成对话”关闭。
+11. 运行 `./scripts/verify_ipc.sh -s <设备序列号>`，观察只杀 `:vehicle` 后主进程 PID 不变、3 秒后服务进程重建并重连。
 
 ---
 
@@ -277,6 +354,12 @@ oneway interface IVehicleEventListener {
 }
 ```
 
+进程与线程：
+
+- 客户端 `:app` 主进程持有 `IVehicleCoreManager.Proxy`；服务端 `CarCoreDaemon` 在 `:vehicle` 进程的 Binder 线程池执行（`binder:<pid>_N`）。
+- 回调接口是 `oneway`：服务端发出后不等待客户端处理完；客户端回调同样运行在客户端 Binder 线程，不阻塞主线程。
+- `registerListener` 是同步调用，返回前会执行 `syncStateTo()` 回推快照；快照回调因 `oneway` 异步到达。
+
 ### 6.2 VehicleRepository（统一门面）
 
 状态与数据：
@@ -304,7 +387,7 @@ val vehicleHealthState: StateFlow<VehicleHealthState>
 命令：
 
 ```kotlin
-fun initialize()
+fun initialize(context: Context)
 fun injectSpeed(speed: Float)
 fun injectGear(gear: VehicleGear)
 fun injectPower(powerState: PowerState)
@@ -414,8 +497,10 @@ fun clearDtcs()
 | 商业量产必备 | 当前状态 |
 | :--- | :--- |
 | CarService / VHAL / `CarPropertyManager` | 无 `android.car` 引用 |
-| 独立车辆服务进程 + `bindService` | 同进程 `object CarCoreDaemon` |
+| 独立车辆服务进程 + `bindService` | 已实现：同 APK 内 `:vehicle` 进程 + AIDL，含死亡重连与快照回推 |
+| 跨进程权限与调用方校验 | 无：同 APK/同 UID，`exported=false`，未声明自定义权限 |
 | 属性读写、订阅、权限、areaId、超时、限流 | 只有 `injectMock*` 和内存 StateFlow |
+| AIDL 版本管理 / 多客户端 | 无：单一客户端、无版本字段 |
 | 真实 ECU / CAN / Ethernet 信号 | 无 |
 
 ### 7.2 系统 HMI 底座
@@ -465,13 +550,13 @@ fun clearDtcs()
 ### 7.5 商业化功能缺口清单（量化）
 
 > 计数口径：按“可独立交付/验收的功能条目”统计，不按代码行数或页面数。同一能力在不同域重复出现时只计一次主责域。
-> **当前缺口：功能层 122 项 + 工程体系 12 项 = 134 项。** 本次新增的 4 个页面把导航、电话、能量、健康从“无”提升到“L1 仿真闭环”，但每个域仍缺 5–8 项量产能力。
+> **当前缺口：功能层 121 项 + 工程体系 12 项 = 133 项。** 完成“独立 `:vehicle` 进程 + `bindService`”后，平台与系统层缺口由 28 项降为 27 项；导航、电话、能量、健康仍为 L1 仿真闭环，每个域还缺 5–8 项量产能力。
 
-#### 7.5.1 平台与系统层（28 项）
+#### 7.5.1 平台与系统层（27 项）
 
 | 能力域 | 已实现 | 缺失数 | 主要缺口 |
 | :--- | :--- | ---: | :--- |
-| 车辆接入与总线 | 同进程 AIDL + mock 注入 | 5 | CarService/VHAL/CarPropertyManager 接入；独立车辆服务进程与 bindService；CAN/Ethernet/ECU 实信号；属性订阅/areaId/超时/降级；SOME-IP/DoIP/TSN 网络管理 |
+| 车辆接入与总线 | 同 APK 内 `:vehicle` 进程 + AIDL/bindService + 死亡重连 + mock 注入 | 4 | CarService/VHAL/CarPropertyManager 接入；CAN/Ethernet/ECU 实信号；属性订阅/areaId/超时/降级；SOME-IP/DoIP/TSN 网络管理 |
 | 系统 HMI | 单 Activity + Compose Tab | 5 | CarSystemUI；CarLauncher；多屏/OccupantZone/Presentation；通知/QS/音量/状态栏；多窗口/分屏/画中画 |
 | 音频系统 | PTT 抢焦点 + 音乐 Ducking | 4 | 多音区 AudioPolicy；焦点栈/路由/提示音；主动降噪/回声消除；独立音区播放与耳机输出 |
 | 电源与热管理 | 电源状态机骨架 | 4 | 量产电源状态机；STR/休眠唤醒策略；电池/座舱热管理；12V 亏电保护 |
@@ -510,17 +595,17 @@ fun clearDtcs()
 
 #### 7.5.4 结论
 
-- **能演示的**：10 个 Tab 的交互/展示闭环、跨域状态联动（导航↔仪表、DMS↔空调）、AIDL 数据链路形态。
+- **能演示的**：10 个 Tab 的交互/展示闭环、跨域状态联动（导航↔仪表、DMS↔空调）、真实双进程 AIDL/Binder 链路（BinderProxy、死亡重连、快照回推）。
 - **不能交付的**：任何真实车辆/云端/蓝牙/地图/BMS/诊断链路，以及全部量产工程与合规体系。
 - 若以“可量产交付”为 100%，本项目当前更接近**功能原型 + 架构样板**，而不是按完成度折算的百分比；缺口应按上表逐项立项补齐。
 
 ### 7.6 通信方式分层（目标量产架构）
 
-> 上表的量产能力并非都依赖 HTTP。当前仓库全部链路为**进程内仿真**，没有网络通信；第 1 节也写明无网络依赖。
+> 上表的量产能力并非都依赖 HTTP。当前仓库没有网络通信：车辆域是**同 APK 双进程的 Binder/AIDL**，其余业务域仍在主进程内仿真；第 1 节也写明无网络依赖。
 
 | 能力 | 主要通信方式 | 是否 HTTP |
 | :--- | :--- | :--- |
-| 当前项目（仿真） | 同进程方法调用、StateFlow、AIDL Binder 形态 | 否 |
+| 当前项目（车辆域跨进程） | 主进程 ↔ `:vehicle` 的 Binder/AIDL 方法调用、`oneway` 回调、StateFlow；其余业务域主进程内；无网络通信 | 否 |
 | 真实车辆接入 / VHAL | Binder/AIDL + CAN/CAN-FD/LIN/Automotive Ethernet（SOME/IP、DDS） | 否 |
 | 数字钥匙 CCC 3.0 | UWB 测距 + BLE + NFC + 安全芯片 | 否（云端开通可能用 HTTPS） |
 | 电话 | Bluetooth HFP / PBAP | 否 |
@@ -541,30 +626,33 @@ fun clearDtcs()
 
 ## 8. 已知限制
 
-1. **IPC 是仿真**：`CarCoreDaemon.asBinder()` 同进程直连，`DeathRecipient` 不会因进程崩溃触发。
-2. **服务端实现渗入客户端**：`:core:vehicle-service` 依赖 `:core:vehicle`，AIDL 抽象不彻底。
-3. **只有 Dashboard 触发初始化**：默认 Tab 保证启动时会执行，但架构上其他入口不应依赖这一点。
-4. **安全策略双份**：`CarCoreDaemon.checkSafetyPolicy()` 与 `CarUxRestrictionsEngine.evaluate()` 各算一套；`VehiclePropertyAdapter.distractionSignal` 当前无消费者。
-5. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
-6. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
-7. **无测试**：仓库没有 `src/test` 或 `src/androidTest`。
-8. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码，仅构建/IDE 缓存），不建议打开。
-9. **四个新域是仿真**：导航没有地图引擎/定位，电话没有真实 HFP/PBAP，能量没有 BMS/充电桩协议，健康没有 UDS/DoIP；页面说明中也标注了“仿真模式”。
-10. **Tab 栏支持横向滚动**：顶部 Tab 栏已启用 `horizontalScroll`；当前模拟器宽度可完整显示 10 个 Tab，但在窄屏或更大字体/显示密度下可能超出宽度，此时可横向滑动访问右侧 Tab。
-11. **跨 Tab 联动靠内存状态**：导航路线、通话、充电、故障码均只存在于进程内，App 重启即丢失。
-12. **健康演示数据不一致**：胎压卡显示右后 2.1 bar 偏低，而扫描出的 DTC `B1A00` 文案写“右前轮胎压偏低”；两处均为静态演示数据，未与真实传感器绑定。
+1. **跨进程只覆盖车辆域**：主进程 ↔ `:vehicle` 已走 AIDL/Binder，并实测进程死亡重连；数字钥匙、T-BOX、导航、电话、能量、健康等仍为主进程内 Manager，不是独立服务。
+2. **同一 APK/UID，不是独立部署**：`:vehicle` 与主进程同包同 UID，`exported=false`；没有自定义权限、调用方校验、AIDL 版本管理，也没有前台服务/`BIND_IMPORTANT` 等保活策略。
+3. **服务端状态只在内存**：`:vehicle` 重建后 speed/gear/power 回到默认值，客户端靠注册快照恢复；没有持久化与状态恢复。
+4. **PTT 没有跨进程回传**：`triggerPttVoice()` 只更新服务端 `_voiceTriggerEvent`，目前无消费者；语音浮层由主进程 `CarAudioManagerDelegate.isPttActive` 驱动。
+5. **重连策略固定**：`RECONNECT_DELAY_MS=3000`，没有指数退避、最大重试、电量/网络感知；`am crash`/`kill -9` 场景已实测，系统级低内存回收未覆盖。
+6. **安全策略双份**：`CarCoreDaemon.checkSafetyPolicy()` 与 `CarUxRestrictionsEngine.evaluate()` 各算一套；`VehiclePropertyAdapter.distractionSignal` 当前无消费者。
+7. **服务端并发与广播收尾待加固**：`checkSafetyPolicy()` 的读-改-写不是原子操作；`dispatch()` 的 `finishBroadcast()` 未放在 `finally`，回调抛出 `Error` 时会跳过收尾。
+8. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
+9. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
+10. **无自动化测试**：仓库没有 `src/test` 或 `src/androidTest`；当前只有 `scripts/verify_ipc.sh` 做启动/崩溃重连的脚本化验证，未接入 CI。
+11. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码，仅构建/IDE 缓存），不建议打开。
+12. **四个新域是仿真**：导航没有地图引擎/定位，电话没有真实 HFP/PBAP，能量没有 BMS/充电桩协议，健康没有 UDS/DoIP；页面说明中也标注了“仿真模式”。
+13. **Tab 栏支持横向滚动**：顶部 Tab 栏已启用 `horizontalScroll`；当前模拟器宽度可完整显示 10 个 Tab，但在窄屏或更大字体/显示密度下可能超出宽度，此时可横向滑动访问右侧 Tab。
+14. **跨 Tab 联动靠内存状态**：导航路线、通话、充电、故障码均只存在于主进程内，App 重启即丢失。
+15. **健康演示数据不一致**：胎压卡显示右后 2.1 bar 偏低，而扫描出的 DTC `B1A00` 文案写“右前轮胎压偏低”；两处均为静态演示数据，未与真实传感器绑定。
 
 ---
 
 ## 9. 构建与运行
 
-### 环境要求
+### 9.1 环境要求
 
 - JDK 17
 - Android SDK Platform 34
 - Gradle 8.4（仓库自带 wrapper）
 
-### 构建
+### 9.2 构建
 
 ```bash
 # Windows Git Bash
@@ -580,21 +668,59 @@ app/build/outputs/apk/debug/app-debug.apk
 
 说明：`local.properties` 未入库，构建时通过 `ANDROID_HOME` 或 IDE 的 SDK 配置提供路径。
 
-### 运行
+### 9.3 运行
 
 - 安装到 Android 模拟器或真机即可，无需连接车辆。应用包名为 `com.oem.car.app`，桌面显示名为 `AAOS Middleware`。
 - 本项目验证所用的 AAOS 模拟器镜像（android-automotive x86_64）驾驶用户为 User 10；命令行安装需显式指定用户，否则默认用户下可能看不到应用：
   ```bash
   adb install -r --user 10 app/build/outputs/apk/debug/app-debug.apk
   ```
-- 所有能力均为本地仿真；没有网络、蓝牙、UWB、摄像头依赖。
+- 业务能力均为本地仿真；车辆域会在应用内额外启动一个 `:vehicle` 进程。没有网络、蓝牙、UWB、摄像头依赖。
+
+### 9.4 跨进程验证
+
+前置：应用已安装并能启动（脚本未检测到主进程时会自动拉起 `MainActivity`）；`adb` 在 PATH 中，Windows 下使用 Git Bash 运行。
+
+```bash
+# 默认 am crash，只杀 :vehicle，无需 root
+./scripts/verify_ipc.sh -s emulator-5554
+
+# userdebug/eng 镜像：adb root 后 kill -9
+./scripts/verify_ipc.sh -s emulator-5554 --mode root
+
+# 保留现有 logcat，脚本用 IPCVerify 标记截取本次日志
+./scripts/verify_ipc.sh -s emulator-5554 --no-clear
+```
+
+脚本断言：主进程 PID 不变、`:vehicle` PID 变化、`scheduleReconnect in 3000ms`、`binder=android.os.BinderProxy`、`localInterface=null`、`registerListener callerPid=<main> myPid=<new>`、快照回推与 `oneway` 回调。
+
+手工验证：
+
+```bash
+adb shell ps -A | grep com.oem.car.app
+adb logcat -c
+adb logcat -s VehicleServiceConn VehicleCoreService CarCoreDaemon
+adb shell am crash --user 10 "$(adb shell pidof com.oem.car.app:vehicle | tr -d '\r')"
+```
+
+不要用 `am force-stop`、`am kill`、`killall` 或 IDE 的 Stop/Terminate：它们会杀掉整个应用（主进程 + `:vehicle`），无法验证只重启服务进程。
 
 ---
 
 ## 10. 后续演进路线（建议）
 
-1. **真实车辆接入**：拆出独立 `service/vehicle-service` 进程，客户端只依赖 `:core:aidl`；用 `CarPropertyManager`/VHAL 适配层替换 `CarCoreDaemon`，保留 mock 作为 debug 实现。
-2. **系统 HMI**：补 CarSystemUI、CarLauncher、多屏/仪表独立显示、OccupantZone。
-3. **平台能力**：多音区音频策略、电源/热管理、诊断日志、安全底座、真实 OTA。
-4. **业务量产化**：数字钥匙 CCC 3.0、T-BOX 云通道、ADAS/SR、DMS/Profile、真实导航与媒体/语音/电话/投屏、能量管理、健康诊断。
-5. **工程体系**：fake VHAL、单测/集成/HIL、CI/CD、性能基线、合规流程。
+1. **车辆接入深化**：独立 `:vehicle` 进程 + `bindService` + AIDL + 崩溃重连已完成；下一步用 `CarPropertyManager`/VHAL 适配层替换 `CarCoreDaemon`，补权限/调用方校验、AIDL 版本、多客户端与状态持久化，保留 mock 作为 debug 实现。
+2. **自动化验证**：把 `scripts/verify_ipc.sh` 接入 CI；补 `checkSafetyPolicy` 单测、AIDL 跨进程集成测试、启动/重连长稳测试。
+3. **系统 HMI**：补 CarSystemUI、CarLauncher、多屏/仪表独立显示、OccupantZone。
+4. **平台能力**：多音区音频策略、电源/热管理、诊断日志、安全底座、真实 OTA。
+5. **业务量产化**：数字钥匙 CCC 3.0、T-BOX 云通道、ADAS/SR、DMS/Profile、真实导航与媒体/语音/电话/投屏、能量管理、健康诊断。
+6. **工程体系**：fake VHAL、单测/集成/HIL、CI/CD、性能基线、合规流程。
+
+## 11. kotlin关键字使用规则
+-场景	                                        适合 object   适合 class + 宿主
+-无状态工具、常量、日志（CarLogger）	            ✅
+-客户端进程内的信号缓存（VehiclePropertyAdapter）	✅
+-纯进程内、无生命周期的仿真数据源	                ✅
+-需要被 Service 托管、有销毁/重建语义		                      ✅
+-需要注入 VHAL/Context、要写单测替换		                      ✅
+-要防止调用方绕过进程边界		                                  ✅

@@ -1,5 +1,6 @@
 package com.oem.car.core.data
 
+import android.content.Context
 import com.oem.car.core.account.AccountManager
 import com.oem.car.core.adas.AdasManager
 import com.oem.car.core.audio.CarAudioManagerDelegate
@@ -25,7 +26,11 @@ import java.util.concurrent.atomic.AtomicBoolean
 object VehicleRepositoryImpl : VehicleRepository {
     private val scope = CoroutineScope(Dispatchers.Default)
 
-    private val serviceManager = VehicleServiceConnectionManager(scope)
+    private var serviceManager: VehicleServiceConnectionManager? = null
+
+    private val _isConnected = MutableStateFlow(false)
+    override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
+
     private val uxEngine = CarUxRestrictionsEngine()
     private val powerManager = CarPowerLifecycleManager()
     private val audioDelegate = CarAudioManagerDelegate()
@@ -39,7 +44,6 @@ object VehicleRepositoryImpl : VehicleRepository {
     private val healthManager = VehicleHealthManager(scope)
     private val initialized = AtomicBoolean(false)
 
-    override val isConnected: StateFlow<Boolean> = serviceManager.isConnected
     override val speedSignal: StateFlow<CarSignal<Float>> = VehiclePropertyAdapter.speedSignal
     override val gearSignal: StateFlow<CarSignal<VehicleGear>> = VehiclePropertyAdapter.gearSignal
     override val powerSignal: StateFlow<CarSignal<PowerState>> = VehiclePropertyAdapter.powerSignal
@@ -61,10 +65,15 @@ object VehicleRepositoryImpl : VehicleRepository {
     private val _driveMode = MutableStateFlow(DriveMode.COMFORT)
     override val driveMode: StateFlow<DriveMode> = _driveMode.asStateFlow()
 
-    override fun initialize() {
+    override fun initialize(context: Context) {
         if (!initialized.compareAndSet(false, true)) return
 
-        serviceManager.connect()
+        val manager = VehicleServiceConnectionManager(context.applicationContext, scope)
+        serviceManager = manager
+        scope.launch {
+            manager.isConnected.collect { _isConnected.value = it }
+        }
+        manager.connect()
 
         // Combine signals to drive safety rules and power states
         scope.launch {
@@ -85,20 +94,20 @@ object VehicleRepositoryImpl : VehicleRepository {
     }
 
     override fun injectSpeed(speed: Float) {
-        serviceManager.injectSpeed(speed)
+        serviceManager?.injectSpeed(speed)
     }
 
     override fun injectGear(gear: VehicleGear) {
-        serviceManager.injectGear(gear)
+        serviceManager?.injectGear(gear)
     }
 
     override fun injectPower(powerState: PowerState) {
-        serviceManager.injectPower(powerState)
+        serviceManager?.injectPower(powerState)
     }
 
     override fun triggerPtt() {
         audioDelegate.triggerPttEvent()
-        serviceManager.triggerPtt()
+        serviceManager?.triggerPtt()
     }
 
     override fun releasePtt() {

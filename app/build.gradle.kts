@@ -24,6 +24,7 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:data"))
+    implementation(project(":core:vehicle"))
     implementation(project(":core:designsystem"))
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:cluster"))

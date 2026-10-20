@@ -20,10 +20,6 @@ class DashboardViewModel(
     val uxRestrictionState: StateFlow<UxRestrictionState> = repository.uxRestrictionState
     val audioZoneState: StateFlow<AudioZoneState> = repository.audioZoneState
 
-    init {
-        repository.initialize()
-    }
-
     fun injectSpeed(speed: Float) = repository.injectSpeed(speed)
     fun injectGear(gear: VehicleGear) = repository.injectGear(gear)
     fun injectPower(powerState: PowerState) = repository.injectPower(powerState)

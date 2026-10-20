@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.oem.car.core.data.VehicleRepositoryImpl
 import com.oem.car.core.designsystem.CarButton
 import com.oem.car.core.designsystem.CarTheme
 import com.oem.car.feature.climate.ClimateScreen
@@ -32,6 +33,7 @@ import com.oem.car.feature.voice.VoiceAssistantOverlay
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        VehicleRepositoryImpl.initialize(applicationContext)
         setContent {
             CarTheme {
                 MainCockpitNavigationHost()
