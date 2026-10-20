@@ -514,6 +514,29 @@ fun clearDtcs()
 - **不能交付的**：任何真实车辆/云端/蓝牙/地图/BMS/诊断链路，以及全部量产工程与合规体系。
 - 若以“可量产交付”为 100%，本项目当前更接近**功能原型 + 架构样板**，而不是按完成度折算的百分比；缺口应按上表逐项立项补齐。
 
+### 7.6 通信方式分层（目标量产架构）
+
+> 上表的量产能力并非都依赖 HTTP。当前仓库全部链路为**进程内仿真**，没有网络通信；第 1 节也写明无网络依赖。
+
+| 能力 | 主要通信方式 | 是否 HTTP |
+| :--- | :--- | :--- |
+| 当前项目（仿真） | 同进程方法调用、StateFlow、AIDL Binder 形态 | 否 |
+| 真实车辆接入 / VHAL | Binder/AIDL + CAN/CAN-FD/LIN/Automotive Ethernet（SOME/IP、DDS） | 否 |
+| 数字钥匙 CCC 3.0 | UWB 测距 + BLE + NFC + 安全芯片 | 否（云端开通可能用 HTTPS） |
+| 电话 | Bluetooth HFP / PBAP | 否 |
+| 投屏 | USB / Wi-Fi + CarPlay/Android Auto 私有协议 | 否 |
+| 导航 | GNSS + 离线地图；在线瓦片/算路走 HTTPS | 部分 |
+| 媒体 | 本地/USB/蓝牙 A2DP；在线流媒体走 HTTPS | 部分 |
+| 语音 | 端侧唤醒 + 云端 ASR/NLU，常用 WebSocket/gRPC | 部分 |
+| T-BOX 云通道 | 云端 MQTT/HTTPS；车端 CAN/以太网 | 部分 |
+| OTA | 云端 HTTPS 下载 + 车端 UDS/DoIP 刷写 | 部分 |
+| ADAS / SR | 车载以太网（SOME/IP、DDS）+ CAN | 否 |
+| DMS / Profile | 摄像头/红外端侧推理；Profile 云同步可用 HTTPS | 部分 |
+| 能量管理 | CAN、PLC（ISO 15118）、GB/T 27930、充电桩 OCPP（WebSocket） | 部分 |
+| 健康诊断 | UDS（ISO 14229）/ DoIP（ISO 13400） | 否 |
+
+> 因此，座舱通信应按**“Binder + 车载总线 + 短距无线 + 云协议”**四层理解；HTTP(S) 只是云侧接入方式之一，且常由 MQTT、WebSocket、gRPC 替代。评估一项能力时，应先判断它属于哪条链路，再讨论具体协议。
+
 ---
 
 ## 8. 已知限制
