@@ -30,6 +30,10 @@ dependencies {
     implementation(project(":feature:climate"))
     implementation(project(":feature:media"))
     implementation(project(":feature:connected"))
+    implementation(project(":feature:navigation"))
+    implementation(project(":feature:phone"))
+    implementation(project(":feature:energy"))
+    implementation(project(":feature:health"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:voice"))
 

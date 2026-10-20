@@ -4,7 +4,11 @@ import com.oem.car.core.account.AccountManager
 import com.oem.car.core.adas.AdasManager
 import com.oem.car.core.audio.CarAudioManagerDelegate
 import com.oem.car.core.digitalkey.DigitalKeyManager
+import com.oem.car.core.energy.EnergyManager
+import com.oem.car.core.health.VehicleHealthManager
 import com.oem.car.core.model.*
+import com.oem.car.core.navigation.NavigationManager
+import com.oem.car.core.phone.PhoneManager
 import com.oem.car.core.power.CarPowerLifecycleManager
 import com.oem.car.core.telematics.TelematicsManager
 import com.oem.car.core.uxrestrictions.CarUxRestrictionsEngine
@@ -29,6 +33,10 @@ object VehicleRepositoryImpl : VehicleRepository {
     private val telematicsManager = TelematicsManager(scope)
     private val adasManager = AdasManager()
     private val accountManager = AccountManager()
+    private val navigationManager = NavigationManager()
+    private val phoneManager = PhoneManager(scope)
+    private val energyManager = EnergyManager(scope)
+    private val healthManager = VehicleHealthManager(scope)
     private val initialized = AtomicBoolean(false)
 
     override val isConnected: StateFlow<Boolean> = serviceManager.isConnected
@@ -41,6 +49,11 @@ object VehicleRepositoryImpl : VehicleRepository {
     override val telematicsState: StateFlow<TelematicsState> = telematicsManager.state
     override val adasState: StateFlow<AdasPerceptionState> = adasManager.state
     override val userProfile: StateFlow<UserProfile> = accountManager.profile
+    override val navigationState: StateFlow<NavigationState> = navigationManager.state
+    override val phoneState: StateFlow<PhoneState> = phoneManager.state
+    override val energyState: StateFlow<EnergyState> = energyManager.state
+    override val vehicleHealthState: StateFlow<VehicleHealthState> = healthManager.state
+    override val navigationPresets: List<NavigationDestination> = navigationManager.presets
 
     private val _climateState = MutableStateFlow(ClimateState())
     override val climateState: StateFlow<ClimateState> = _climateState.asStateFlow()
@@ -131,4 +144,34 @@ object VehicleRepositoryImpl : VehicleRepository {
         if (!profile.isFaceIdVerified) return
         _climateState.value = _climateState.value.copy(driverTemp = profile.preferredTemp)
     }
+
+    override fun startNavigation(destination: NavigationDestination) = navigationManager.startRoute(destination)
+
+    override fun advanceNavigation() = navigationManager.advance()
+
+    override fun stopNavigation() = navigationManager.stopRoute()
+
+    override fun togglePhoneBluetooth() = phoneManager.toggleBluetooth()
+
+    override fun dialContact(contact: Contact) = phoneManager.dial(contact)
+
+    override fun simulateIncomingCall(contact: Contact) = phoneManager.simulateIncomingCall(contact)
+
+    override fun answerCall() = phoneManager.answerCall()
+
+    override fun hangUpCall() = phoneManager.hangUp()
+
+    override fun toggleCallMute() = phoneManager.toggleMute()
+
+    override fun toggleCharging() = energyManager.toggleCharging()
+
+    override fun adjustChargeLimit(delta: Int) = energyManager.adjustChargeLimit(delta)
+
+    override fun toggleScheduledCharging() = energyManager.toggleScheduledCharging()
+
+    override fun togglePreconditioning() = energyManager.togglePreconditioning()
+
+    override fun scanVehicleHealth() = healthManager.scan()
+
+    override fun clearDtcs() = healthManager.clearDtcs()
 }

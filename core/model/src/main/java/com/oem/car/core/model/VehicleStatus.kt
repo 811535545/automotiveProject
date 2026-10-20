@@ -124,3 +124,118 @@ data class UserProfile(
     val ambientColorHex: String = "#00E5FF",
     val isFaceIdVerified: Boolean = true
 )
+
+// ================= 导航与路线规划数据模型 =================
+enum class RouteStatus(val display: String) {
+    IDLE("未开始导航"),
+    NAVIGATING("导航中"),
+    ARRIVED("已到达")
+}
+
+data class NavigationDestination(
+    val name: String,
+    val address: String,
+    val distanceKm: Float,
+    val etaMinutes: Int
+)
+
+data class NavigationState(
+    val status: RouteStatus = RouteStatus.IDLE,
+    val destination: NavigationDestination? = null,
+    val nextInstruction: String = "未设置目的地",
+    val distanceToTurnMeters: Int = 0,
+    val remainingKm: Float = 0f,
+    val etaMinutes: Int = 0,
+    val speedLimitKph: Int = 80,
+    val laneHint: String = "",
+    val progress: Float = 0f
+)
+
+// ================= 电话与蓝牙通话数据模型 =================
+enum class CallStatus(val display: String) {
+    IDLE("空闲"),
+    DIALING("呼出中"),
+    RINGING("来电"),
+    ACTIVE("通话中")
+}
+
+data class Contact(
+    val name: String,
+    val phone: String
+)
+
+data class PhoneState(
+    val isBluetoothConnected: Boolean = true,
+    val deviceName: String = "Pixel 8 Pro",
+    val contacts: List<Contact> = listOf(
+        Contact("张先生", "138 0000 1234"),
+        Contact("李女士", "139 0000 5678"),
+        Contact("道路救援", "400 800 8888")
+    ),
+    val callStatus: CallStatus = CallStatus.IDLE,
+    val currentContact: Contact? = null,
+    val callDurationSec: Int = 0,
+    val isMuted: Boolean = false,
+    val missedCalls: Int = 2,
+    val audioRoute: String = "车机扬声器"
+)
+
+// ================= 能量管理与充电数据模型 =================
+data class EnergyState(
+    val socPercent: Int = 68,
+    val rangeKm: Int = 412,
+    val isCharging: Boolean = false,
+    val chargingPowerKw: Float = 0f,
+    val chargeLimitPercent: Int = 80,
+    val isScheduledCharging: Boolean = true,
+    val scheduledTime: String = "23:00",
+    val isPreconditioning: Boolean = false,
+    val batteryTempC: Float = 26f,
+    val consumptionKwh100Km: Float = 15.8f,
+    val chargerType: String = "直流快充 120 kW"
+)
+
+// ================= 车辆健康与诊断数据模型 =================
+enum class HealthSeverity(val display: String) {
+    NORMAL("正常"),
+    WARNING("注意"),
+    FAULT("故障")
+}
+
+data class TirePressure(
+    val position: String,
+    val bar: Float
+)
+
+data class SystemHealth(
+    val name: String,
+    val severity: HealthSeverity,
+    val detail: String
+)
+
+data class DtcCode(
+    val code: String,
+    val description: String,
+    val severity: HealthSeverity
+)
+
+data class VehicleHealthState(
+    val tires: List<TirePressure> = listOf(
+        TirePressure("左前", 2.4f),
+        TirePressure("右前", 2.4f),
+        TirePressure("左后", 2.3f),
+        TirePressure("右后", 2.1f)
+    ),
+    val battery12vVoltage: Float = 12.6f,
+    val odometerKm: Int = 18642,
+    val serviceDueKm: Int = 20000,
+    val isScanning: Boolean = false,
+    val lastScanResult: String = "尚未扫描",
+    val dtcs: List<DtcCode> = emptyList(),
+    val systems: List<SystemHealth> = listOf(
+        SystemHealth("制动系统 ABS", HealthSeverity.NORMAL, "自检通过"),
+        SystemHealth("车身稳定 ESP", HealthSeverity.NORMAL, "自检通过"),
+        SystemHealth("安全气囊 SRS", HealthSeverity.NORMAL, "自检通过"),
+        SystemHealth("ADAS 感知", HealthSeverity.WARNING, "摄像头标定建议")
+    )
+)

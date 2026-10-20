@@ -14,6 +14,7 @@ import com.oem.car.core.data.VehicleRepositoryImpl
 import com.oem.car.core.designsystem.CarCard
 import com.oem.car.core.designsystem.CarTheme
 import com.oem.car.core.designsystem.SpeedGaugeComponent
+import com.oem.car.core.model.RouteStatus
 
 @Composable
 fun ClusterScreen(
@@ -21,6 +22,8 @@ fun ClusterScreen(
 ) {
     val speedSignal by repository.speedSignal.collectAsState()
     val gearSignal by repository.gearSignal.collectAsState()
+    val navigation by repository.navigationState.collectAsState()
+    val adas by repository.adasState.collectAsState()
 
     CarTheme {
         Box(
@@ -34,12 +37,14 @@ fun ClusterScreen(
                 Text("🖥️ 液晶仪表 (Instrument Cluster Display)", color = Color.Gray, fontSize = 16.sp)
                 Spacer(modifier = Modifier.height(16.dp))
 
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(48.dp)
+                ) {
                 SpeedGaugeComponent(
                     speed = speedSignal.value,
                     gearDisplay = gearSignal.value.display
                 )
-
-                Spacer(modifier = Modifier.height(24.dp))
 
                 CarCard(
                     modifier = Modifier.width(360.dp),
@@ -48,9 +53,31 @@ fun ClusterScreen(
                     Column(horizontalAlignment = Alignment.Start) {
                         Text("📍 仪表 TBT 导航卡片", color = Color(0xFF00E5FF), fontSize = 14.sp)
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("前方 200m 右转进入 科技大道", color = Color.White, fontSize = 18.sp)
-                        Text("辅助驾驶 (ADAS): 保持车道中 (80km/h 巡航)", color = Color.Green, fontSize = 13.sp)
+                        Text(
+                            if (navigation.status == RouteStatus.NAVIGATING) {
+                                navigation.nextInstruction
+                            } else {
+                                "未开始导航，请在「导航」页设置目的地"
+                            },
+                            color = Color.White,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            if (navigation.status == RouteStatus.NAVIGATING) {
+                                "剩余 %.1f km · ETA %d 分钟 · 限速 %d km/h".format(
+                                    navigation.remainingKm,
+                                    navigation.etaMinutes,
+                                    navigation.speedLimitKph
+                                )
+                            } else {
+                                "辅助驾驶: ${if (adas.isNoaActive) "NOA 开启" else "NOA 关闭"} · " +
+                                    "${if (adas.laneKeepActive) "车道保持" else "车道关闭"} · ${adas.cruiseSpeed.toInt()} km/h"
+                            },
+                            color = if (navigation.status == RouteStatus.NAVIGATING) Color(0xFF00E676) else Color.Gray,
+                            fontSize = 13.sp
+                        )
                     }
+                }
                 }
             }
         }

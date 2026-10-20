@@ -20,7 +20,11 @@ import com.oem.car.feature.climate.ClimateScreen
 import com.oem.car.feature.cluster.ClusterScreen
 import com.oem.car.feature.connected.ConnectedScreen
 import com.oem.car.feature.dashboard.DashboardScreen
+import com.oem.car.feature.energy.EnergyScreen
+import com.oem.car.feature.health.HealthScreen
 import com.oem.car.feature.media.MediaScreen
+import com.oem.car.feature.navigation.NavigationScreen
+import com.oem.car.feature.phone.PhoneScreen
 import com.oem.car.feature.settings.SettingsScreen
 import com.oem.car.feature.voice.VoiceAssistantOverlay
 
@@ -39,9 +43,13 @@ class MainActivity : ComponentActivity() {
 enum class CockpitTab(val title: String) {
     DASHBOARD("中控"),
     CLUSTER("仪表"),
+    NAVIGATION("导航"),
     CLIMATE("空调"),
     MEDIA("影音"),
+    PHONE("电话"),
     CONNECTED("互联"),
+    ENERGY("能量"),
+    HEALTH("健康"),
     SETTINGS("设置")
 }
 
@@ -84,9 +92,13 @@ fun MainCockpitNavigationHost() {
                 when (selectedTab) {
                     CockpitTab.DASHBOARD -> DashboardScreen()
                     CockpitTab.CLUSTER -> ClusterScreen()
+                    CockpitTab.NAVIGATION -> NavigationScreen()
                     CockpitTab.CLIMATE -> ClimateScreen()
                     CockpitTab.MEDIA -> MediaScreen()
+                    CockpitTab.PHONE -> PhoneScreen()
                     CockpitTab.CONNECTED -> ConnectedScreen()
+                    CockpitTab.ENERGY -> EnergyScreen()
+                    CockpitTab.HEALTH -> HealthScreen()
                     CockpitTab.SETTINGS -> SettingsScreen()
                 }
             }

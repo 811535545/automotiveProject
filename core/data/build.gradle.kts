@@ -23,5 +23,9 @@ dependencies {
     implementation(project(":core:telematics"))
     implementation(project(":core:adas"))
     implementation(project(":core:account"))
+    implementation(project(":core:navigation"))
+    implementation(project(":core:phone"))
+    implementation(project(":core:energy"))
+    implementation(project(":core:health"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }

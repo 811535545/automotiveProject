@@ -16,6 +16,11 @@ interface VehicleRepository {
     val telematicsState: StateFlow<TelematicsState>
     val adasState: StateFlow<AdasPerceptionState>
     val userProfile: StateFlow<UserProfile>
+    val navigationState: StateFlow<NavigationState>
+    val phoneState: StateFlow<PhoneState>
+    val energyState: StateFlow<EnergyState>
+    val vehicleHealthState: StateFlow<VehicleHealthState>
+    val navigationPresets: List<NavigationDestination>
 
     fun initialize()
     fun injectSpeed(speed: Float)
@@ -39,4 +44,19 @@ interface VehicleRepository {
     fun cycleSeatPosition()
     fun adjustPreferredTemp(delta: Float)
     fun applyUserProfile()
+    fun startNavigation(destination: NavigationDestination)
+    fun advanceNavigation()
+    fun stopNavigation()
+    fun togglePhoneBluetooth()
+    fun dialContact(contact: Contact)
+    fun simulateIncomingCall(contact: Contact)
+    fun answerCall()
+    fun hangUpCall()
+    fun toggleCallMute()
+    fun toggleCharging()
+    fun adjustChargeLimit(delta: Int)
+    fun toggleScheduledCharging()
+    fun togglePreconditioning()
+    fun scanVehicleHealth()
+    fun clearDtcs()
 }
