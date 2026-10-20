@@ -1,302 +1,416 @@
-# CommercialCarApp - AAOS 智能座舱中间件与应用项目文档
+# CommercialCarApp — AAOS 智能座舱仿真架构
 
-本文档详细介绍了 CommercialCarApp 项目的目录结构、各模块作用注释、项目入口点、核心接口 API 说明，以及对比**商业量产级车载项目**缺失的功能模块（如数字钥匙、T-BOX 远程控车、ADAS 3D 渲染等）分析。
+> 本文档对应**仓库根目录**的实际工程（`E:\gitHub\automotiveProject`），不是 `CommercialCarApp/` 子目录。
+>
+> **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号、Binder 服务、数字钥匙、T-BOX、OTA、ADAS、DMS 均为**进程内仿真**，不连接真车、不连接云端，也不代表量产合规实现。
 
 ---
 
-## 📁 1. 项目目录结构与模块说明
+## 1. 项目定位与边界
 
-项目采用了模块化的 Android 车载架构，划分了 `:app` 入口、`:core` 核心能力层以及 `:feature` 业务功能层。
+### 1.1 这个项目做了什么
 
+- 用 Kotlin + Jetpack Compose 实现一套横屏座舱 HMI，包含 6 个页面：中控仪表、液晶仪表、空调、多媒体、智能互联、车辆设置。
+- 用 `app / feature / core` 三层模块化组织代码，能力下沉到 `core`，页面隔离在 `feature`。
+- 用 `StateFlow` 做单向数据流，用 `VehicleRepository` 作为统一数据门面。
+- 用 AIDL + `RemoteCallbackList` + `DeathRecipient` 演示车辆服务的接口形态（当前为同进程模拟）。
+- 补齐 4 个扩展域的仿真闭环：数字钥匙、T-BOX/车云/OTA、ADAS 感知、DMS/多账户 Profile。
+
+### 1.2 这个项目明确没有做
+
+- 没有接入 `android.car`、CarService、VHAL 或真实车辆总线。
+- 没有独立服务进程，`CarCoreDaemon` 与 App 在同一个进程。
+- 没有 CarSystemUI、Launcher、多显示屏、副驾/后排 RSE。
+- 没有真实数字钥匙协议（CCC 3.0 / UWB / BLE / NFC / SE）、真实 T-BOX 云通道、真实 OTA、真实 ADAS 感知与 3D SR 渲染。
+- 没有测试体系、CI、签名发布、功能安全/信息安全流程。
+
+因此：**它适合做架构演示、AAOS 学习、面试项目；不能直接作为量产座舱交付。**
+
+---
+
+## 2. 技术栈
+
+| 项目 | 版本 / 说明 |
+| :--- | :--- |
+| 语言 | Kotlin 1.9.22 |
+| UI | Jetpack Compose（BOM 2024.10.00）+ Material3 |
+| 构建 | Gradle 8.4 + AGP 8.2.2 |
+| JDK | 17 |
+| Android | compileSdk 34 / minSdk 28 / targetSdk 34 |
+| 架构 | 多模块 + Repository + StateFlow + 单向数据流 |
+| 并发 | kotlinx-coroutines-core 1.7.3 |
+| 屏幕 | 单 Activity、横屏、6 个 Tab |
+
+---
+
+## 3. 目录结构与模块职责
+
+```text
+automotiveProject/
+├── app/                              # 应用入口：MainActivity + DockBar + 6 Tab + 语音 Overlay
+├── core/
+│   ├── aidl/                         # IVehicleCoreManager / IVehicleEventListener
+│   ├── audio/                        # PTT 音频焦点与 Ducking 仿真
+│   ├── common/                       # 日志、Dispatchers、Result
+│   ├── data/                         # VehicleRepository 接口与实现（统一门面）
+│   ├── designsystem/                 # CarTheme、CarButton、CarCard、仪表盘组件
+│   ├── model/                        # 车辆信号、档位、电源、扩展域数据模型
+│   ├── power/                        # 电源状态机（STR / Garage / 关机预备）
+│   ├── uxrestrictions/               # 行车防分心策略（演示阈值）
+│   ├── vehicle/                      # CarCoreDaemon：AIDL Stub 仿真服务端
+│   ├── vehicle-service/              # 连接管理 + AIDL 回调转 StateFlow
+│   ├── digitalkey/                   # 【新增】数字钥匙仿真（区域/技术/门锁/启动授权）
+│   ├── telematics/                   # 【新增】T-BOX/车云/OTA 仿真
+│   ├── adas/                         # 【新增】ADAS/感知目标仿真
+│   └── account/                      # 【新增】DMS/多账户/个性化仿真
+└── feature/
+    ├── dashboard/                    # 中控仪表 + 总线注入 Injector
+    ├── cluster/                      # 液晶仪表（当前是同一 Activity 的 Tab）
+    ├── climate/                      # 双区空调 UI
+    ├── media/                        # 影音 UI（受防分心策略控制）
+    ├── connected/                    # 【新增】智能互联：数字钥匙/T-BOX/ADAS/账户
+    ├── settings/                     # 驾驶模式 + ADAS 静态展示
+    └── voice/                        # 语音助手 PTT 浮层
 ```
-CommercialCarApp/
-├── app/                      # [App入口模块] 主 Activity、Cockpit 导航与 Tab 切换容器
-├── core/                     # [核心中间件层]
-│   ├── aidl/                 # 跨进程 Binder IPC 通信 AIDL 接口定义
-│   ├── audio/                # 车载多区音频、PTT 语音按抢占与音量 Ducking 管理
-│   ├── common/               # 全局协程 Dispatcher、Logcat 统一日志与 Result 封装
-│   ├── data/                 # 车辆数据仓库层 (VehicleRepository)
-│   ├── designsystem/         # 车规级 UI 设计系统 (CarTheme, CarButton, Gauge 仪表盘)
-│   ├── model/                # 座舱数据模型 (信号状态、档位、电源模式、防分心状态等)
-│   ├── power/                # 车辆电源生命周期管理 (STR 内存休眠、关机预备)
-│   ├── uxrestrictions/       # 车规防分心安全引擎 (依据车速/档位执行 GB44495 拦截)
-│   ├── vehicle/              # 进程内 Vehicle 服务仿真 Daemon (CarCoreDaemon)
-│   └── vehicle-service/      # 车辆服务连接管理 (Binder DeathRecipient 死亡重连与属性适配)
-└── feature/                  # [业务功能模块层]
-    ├── climate/              # HVAC 双区空调与风量控制 UI
-    ├── cluster/              # 液晶仪表屏 (Instrument Cluster Display) UI 与 TBT 导航卡片
-    ├── dashboard/            # 中控台核心仪表、总线数据模拟注入器 (Injector) UI 与 ViewModel
-    ├── media/                # 高精影音播放器 UI (受行车防分心策略管控)
-    ├── settings/             # 车辆控制与个性化设置 (驾驶模式切换、ADAS 状态)
-    └── voice/                # 智能语音助手 PTT 弹窗 Overlay 交互
-```
 
-### 模块详细作用说明
+### 3.1 模块职责与成熟度
 
-| 模块路径 | 模块名称 | 作用与职责说明 |
+| 模块 | 职责 | 成熟度 |
 | :--- | :--- | :--- |
-| `:app` | **应用入口** | 包含 `MainActivity`，负责初始化全局 `CarTheme`、搭建顶栏 Dock Bar 导航，管理 5 大功能页面的切换与 `VoiceAssistantOverlay` 的悬浮置顶。 |
-| `:core:aidl` | **IPC 接口** | 定义 `IVehicleCoreManager.aidl` 与 `IVehicleEventListener.aidl`，是车辆服务与客户端 App 通信的 Binder 接口契约。 |
-| `:core:audio` | **车载音频** | 管理座舱音频焦点，处理方向盘 PTT (Push-To-Talk) 语音按键事件，控制背景音乐音量 Ducking (压低)。 |
-| `:core:common` | **通用工具** | 提供统一的协程调度器 (`CarDispatchers`)、车规日志工具 (`CarLogger`) 与标准结果封装 (`Result`)。 |
-| `:core:data` | **数据仓库** | 统一数据出口 `VehicleRepository`，聚合来自 VehicleService、UXRestrictionsEngine、PowerManager 和 AudioManager 的状态。 |
-| `:core:designsystem` | **设计系统** | 车规级深色主题色板、大颗粒防盲打控件 (`CarButton` / `CarCard`)、车速仪表盘 (`SpeedGaugeComponent`) 与安全标签 (`SafetyBadge`)。 |
-| `:core:model` | **数据模型** | 包含 `CarSignal<T>`（带有效性状态）、`VehicleGear`（档位）、`PowerState`（电源状态）、`UxRestrictionState`（防分心策略）、`ClimateState`（空调）等。 |
-| `:core:power` | **电源管理** | 监控车辆电源模式迁移（NORMAL 运行、STR 内存休眠挂起、Garage Mode 车库维护、关机预备），提供监听器注册。 |
-| `:core:uxrestrictions`| **防分心引擎** | 实时评估车速与档位，当车速 > 0.5km/h 或挂入 D 档时，触发防分心规则（禁止播放视频、限制列表长度为 5-10 条）。 |
-| `:core:vehicle` | **车辆服务 Daemon** | 运行在 Stub 层的单例 `CarCoreDaemon`，模拟车辆硬件 ECU/VHAL 推流，并维护 `RemoteCallbackList` 广播回调。 |
-| `:core:vehicle-service`| **服务连接适配** | `VehicleServiceConnectionManager` 绑定 Binder 并设置 `IBinder.DeathRecipient` 死亡重连机制；`VehiclePropertyAdapter` 将 AIDL 回调转为响应式 `StateFlow`。 |
-| `:feature:climate` | **空调功能** | 提供双区（主驾/副驾）独立温度调节、7 挡风量调节与 HVAC 状态展示。 |
-| `:feature:cluster` | **液晶仪表** | 模拟二级独立显示屏，展示大字号车速、档位、TBT 导航卡片及 ADAS 巡航状态。 |
-| `:feature:dashboard` | **中控仪表盘** | 展示座舱中间件状态，内置**总线仿真 Injector** 按钮面板（支持手动注入 P/D 档、车速、STR 休眠与 PTT 语音触发）。 |
-| `:feature:media` | **多媒体影音** | 播放器 UI，自动感知防分心状态；行车中强制关闭视频并提示安全警告，仅保留音频播放。 |
-| `:feature:settings` | **车辆设置** | 驾驶模式切换（ECO/舒适/运动/自定义）及 ADAS 辅助功能状态展示。 |
-| `:feature:voice` | **语音助手** | 悬浮遮罩 UI，响应 PTT 事件弹窗，并展示音频焦点压低动画。 |
+| `:app` | `MainActivity`、6 个 Tab、`VoiceAssistantOverlay` 全局浮层 | 可用 |
+| `:core:aidl` | 车辆服务契约，`oneway` 异步回调 | 完整（但当前同进程） |
+| `:core:vehicle` | `CarCoreDaemon` 模拟服务端，维护 `RemoteCallbackList` | 仿真 |
+| `:core:vehicle-service` | 连接、死亡监听、注入代理、AIDL 回调转 `StateFlow` | 仿真 |
+| `:core:data` | 聚合所有域状态，暴露统一 `VehicleRepository` | 可用 |
+| `:core:uxrestrictions` | 按车速/档位计算防分心状态 | 演示规则 |
+| `:core:power` | 电源状态迁移与监听器 | 骨架 |
+| `:core:audio` | PTT 抢焦点、音乐 Ducking | 骨架 |
+| `:core:digitalkey` | 靠近/远离、技术切换、门锁、启动授权 | 仿真闭环 |
+| `:core:telematics` | 云连接、哨兵、远程命令、OTA 进度 | 仿真闭环 |
+| `:core:adas` | NOA、车道保持、巡航速度、感知目标 | 仿真闭环 |
+| `:core:account` | 人脸验证、座椅记忆、偏好温度、应用 Profile | 仿真闭环 |
+| `:core:model` | `CarSignal<T>` 及所有业务数据类 | 完整 |
+| `:core:designsystem` | 车规大触控组件与深色主题 | 可用 |
+| `:core:common` | 日志、调度器、Result | 可用 |
+| `:feature:*` | 各业务页面 | Dashboard/Connected 可交互，其余以展示为主 |
 
 ---
 
-## 🔑 2. 与商业量产级项目的差距分析 (Missing Commercial Capabilities)
+## 4. 架构与数据流
 
-相较于上路量产的整车智能座舱系统，当前项目作为架构原型/中间件 Demo，在以下商业级核心模块和能力上仍需补充扩展：
+### 4.1 依赖关系
 
-### 2.1 🔑 数字钥匙与无感进出 (Digital Key System)
-* **CCC 3.0 规范标准**: 商业级项目需遵循 **CCC (Car Connectivity Consortium) Digital Key 3.0** 及 ICCCE 行业标准。
-* **多无线技术融合**:
-  * **UWB (超宽带)**: 厘米级高精度定位与测距，实现靠近无感解锁、灯光迎宾、离车自动落锁。
-  * **BLE (低功耗蓝牙)**: 远距离连接保活、车况预查询、辅助测距。
-  * **NFC (近场通信)**: B 柱贴刷紧急解锁、手机断电无电解锁。
-* **安全芯片 (SE) 与 PKI**: 依赖车端 **SE (Secure Element)** 安全芯片与 HSM (硬件安全模块) 存储私钥与非对称加密证书，防止中继攻击 (Relay Attack)。
-* **架构层级**: 车端数字钥匙 ECU -> CAN/Ethernet -> VHAL -> CarKey Service -> Android App / Wallet 接入。
-
-### 2.2 📡 车联网与远程控制 (Telematics / T-BOX / Cloud)
-* **T-BOX (Telematics Box) 硬件通信**: 4G/5G 蜂窝网络、GNSS 高精定位、eCall 紧急呼叫。
-* **远控协议 (Remote Control)**: 采用 MQTT / CoAP / TLS 加密双向通道，实现手机 APP 远程开空调、锁车门、预约充电、哨兵模式 (Sentry Mode) 摄像头画面回传。
-* **OTA (Over-The-Air) 升级管理**:
-  * **FOTA (固件升级)**: 智能网关协调全车 30+ 个 ECU 的固件刷写。
-  * **SOTA (软件升级)**: AAOS 系统镜像与应用差分升级（A/B 双分区无感升级与回滚保护）。
-
-### 2.3 🛡️ ADAS 智驾协同与 3D 环境重构 (ADAS & SR Rendering)
-* **SR (Scene Rendering) 3D 车道重构**: 将毫米波雷达、激光雷达与摄像头感知数据通过渲染引擎 (Unity / Unreal / Canvas) 实时绘制在仪表屏/HUD 屏上（车道线、行人、临车、锥桶）。
-* **AR-HUD (增强现实抬头显示)**: 导航引导箭头与真实路面贴合显示。
-
-### 2.4 🎨 CarSystemUI 车规系统定制 (Custom SystemUI & Multi-Display)
-* **定制化 SystemUI**: 包含顶部 Status Bar、底部 HVAC 控制 Dock Bar、下拉 Quick Settings 快捷面板、Volume Bar。
-* **窗口与多屏协同**: 屏间互联拖拽 (中控与副驾屏/后排娱乐屏 RSE 视频推屏)、CarPlay / HiCar / Android Auto 手机映射通道。
-
-### 2.5 👤 多账户与个性化座舱 (Profile & Account System)
-* **DMS 摄像头人脸识别**: 驾驶员上车人脸识别自动切换 Profile，联动调节座椅记忆位置、后视镜角度、空调温度、氛围灯与偏好音乐。
-
-### 2.6 🛠️ 车规诊断与信息安全 (UDS, ISO 26262, ISO 21434)
-* **UDS 诊断 (ISO 14229)**: 读取/清除 DTC 故障码、数据流读取及 Routine Control 测试。
-* **SecOC 报文鉴权与车载防火墙**: 防止 CAN 总线注入与网络安全入侵。
-
----
-
-## 🚪 3. 项目入口与核心调用链 (Project Entry Point)
-
-### 3.1 主入口文件
-* **路径**: `app/src/main/java/com/oem/car/app/MainActivity.kt`
-* **入口 Activity**: `MainActivity`
-* **界面结构**:
-  * 顶部导航栏 (Automotive Dock Bar): 64dp 高度，提供中控仪表、液晶仪表、空调 HVAC、多媒体影音、车辆设置 5 大 Tab 切换。
-  * 悬浮覆盖层 (Overlay): `VoiceAssistantOverlay()` 全局置顶，用于响应语音 PTT 事件。
-
-### 3.2 核心数据流架构 (Data Flow Architecture)
-
-```
-[UI 层: Dashboard / Climate / Media / Cluster]
-        │
-        ▼ (Collect StateFlow)
-[ViewModel 层: DashboardViewModel]
-        │
-        ▼ (Expose Flows / Invoke Commands)
-[仓库层: VehicleRepositoryImpl]
-        ├──> [CarUxRestrictionsEngine] ──> (根据速度/档位评估防分心)
-        ├──> [CarPowerLifecycleManager] ──> (处理电源模式转变)
-        ├──> [CarAudioManagerDelegate] ──> (处理 PTT 与 Audio Ducking)
-        └──> [VehicleServiceConnectionManager]
-                     │
-                     ▼ (Binder IPC / DeathRecipient)
-         [VehiclePropertyAdapter] <──> [CarCoreDaemon (AIDL Stub)]
+```text
+app
+ ├── feature:dashboard / cluster / climate / media / connected / settings / voice
+ │     └── core:data
+ │           ├── core:vehicle-service ──► core:vehicle ──► core:aidl
+ │           ├── core:uxrestrictions / power / audio
+ │           ├── core:digitalkey / telematics / adas / account
+ │           └── core:common / model
+ └── core:designsystem ──► core:model
 ```
 
+已知依赖问题（保留现状，未在本轮重构）：`:core:vehicle-service` 为了直接拿 `CarCoreDaemon` 而依赖 `:core:vehicle`，客户端模块编译期依赖服务端实现，真实远程服务场景应只依赖 `:core:aidl`。
+
+### 4.2 启动链路
+
+```text
+MainActivity
+  └── DashboardScreen (默认 Tab)
+        └── DashboardViewModel.init
+              └── VehicleRepositoryImpl.initialize()   // AtomicBoolean 保证只执行一次
+                    ├── VehicleServiceConnectionManager.connect()
+                    │     ├── CarCoreDaemon.asBinder()  // 同进程，非 bindService
+                    │     └── registerListener(...)
+                    └── 常驻协程
+                          ├── speedSignal → CarUxRestrictionsEngine.evaluate()
+                          ├── gearSignal  → CarUxRestrictionsEngine.evaluate()
+                          └── powerSignal → CarPowerLifecycleManager.onPowerStateChanged()
+```
+
+### 4.3 车辆信号链路（仿真）
+
+```text
+Dashboard Injector
+  └── VehicleRepository.injectSpeed / injectGear / injectPower
+        └── VehicleServiceConnectionManager
+              └── CarCoreDaemon.injectMockXxx()
+                    ├── 更新内部 StateFlow
+                    ├── checkSafetyPolicy()
+                    └── dispatch(IVehicleEventListener)
+                          └── VehiclePropertyAdapter 更新 StateFlow
+                                └── VehicleRepository 暴露
+                                      └── Compose collectAsState()
+```
+
+注意：`CarCoreDaemon.asBinder()` 返回的是同进程对象，`linkToDeath` 不会在真实进程崩溃时触发，因此“3 秒自动重连”目前只是代码演示。
+
+### 4.4 扩展域链路
+
+```text
+ConnectedScreen
+  ├── repository.digitalKeyState / moveKeyCloser / moveKeyAway / cycleKeyTech / toggleDoorLock
+  │     └── DigitalKeyManager
+  ├── repository.telematicsState / toggleSentryMode / sendRemoteCommand / startOtaUpdate
+  │     └── TelematicsManager（协程模拟 OTA 阶段与进度）
+  ├── repository.adasState / toggleNoa / toggleLaneKeep / adjustCruiseSpeed
+  │     └── AdasManager
+  └── repository.userProfile / verifyDriverFace / cycleSeatPosition / adjustPreferredTemp / applyUserProfile
+        └── AccountManager
+              └── applyUserProfile() 会把偏好温度写入 climateState（跨域联动示例）
+```
+
+### 4.5 PTT 链路
+
+```text
+Dashboard "方向盘 PTT" 或语音浮层
+  └── repository.triggerPtt()
+        ├── CarAudioManagerDelegate.triggerPttEvent()   // 本地音频状态：isPttActive=true
+        └── CarCoreDaemon.triggerPttVoice()             // 仅更新 event Flow，当前没有消费者
+VoiceAssistantOverlay "完成对话"
+  └── repository.releasePtt()
+        └── CarAudioManagerDelegate.releasePttEvent()   // isPttActive=false，浮层关闭
+```
+
 ---
 
-## 🔌 4. 核心接口文档 (API Reference)
+## 5. 页面与演示路径
 
-### 4.1 IPC Binder AIDL 接口
+| Tab | 可演示内容 |
+| :--- | :--- |
+| 中控仪表 | 车速/档位/电源状态；Injector 注入 P 档、D 档 80km/h、STR 休眠、唤醒、PTT；防分心视频拦截 |
+| 液晶仪表 | 大字号车速、档位、静态 TBT 导航卡片、静态 ADAS 文案 |
+| 空调 HVAC | 主/副驾温度 ±0.5°C、风量 1–7 挡（本地状态） |
+| 多媒体影音 | 播放/暂停；行车状态自动切换为“视频防分心保护” |
+| **智能互联** | 数字钥匙靠近/远离/切换技术/门锁；T-BOX 远程命令、哨兵、OTA 进度；ADAS NOA/车道/巡航；DMS 人脸、座椅、偏好温度、应用 Profile |
+| 车辆设置 | 驾驶模式切换；ADAS 能力静态展示 |
 
-#### 4.1.1 `IVehicleCoreManager.aidl`
-车辆核心服务管理接口（服务端实现）。
+**建议演示顺序**
+
+1. 中控仪表点击“D档 (80 km/h)”，观察防分心状态变红，切到多媒体页看到视频被拦截。
+2. 点击“P档 (0 km/h)”恢复安全状态。
+3. 智能互联页把数字钥匙从远处逐步“靠近”，观察门锁与启动授权变化。
+4. 点击“OTA 升级”，观察 CHECKING → DOWNLOADING → VERIFYING → APPLYING → SUCCESS。
+5. DMS 点击“人脸识别”后点击“应用个性化到座舱”，切到空调页确认主驾温度被改为偏好温度。
+6. 点击“方向盘 PTT”弹出语音浮层，点击“完成对话”关闭。
+
+---
+
+## 6. 核心接口
+
+### 6.1 AIDL
+
+`core/aidl/src/main/aidl/com/oem/car/middleware/IVehicleCoreManager.aidl`
 
 ```aidl
-package com.oem.car.middleware;
-
-import com.oem.car.middleware.IVehicleEventListener;
-
-interface IVehicleCoreManager {
-    // 注册车辆事件监听器
-    void registerListener(IVehicleEventListener listener);
-    
-    // 注销车辆事件监听器
-    void unregisterListener(IVehicleEventListener listener);
-    
-    // 仿真注入：注入车速 (km/h)
-    void injectMockSpeed(float speed);
-    
-    // 仿真注入：注入档位代码 (1=P, 2=R, 4=N, 8=D)
-    void injectMockGear(int gear);
-    
-    // 仿真注入：注入电源状态 (0=RUNNING, 1=STR_SLEEP, 2=GARAGE_MODE, 3=SHUTDOWN_PREPARE)
-    void injectMockPower(int state);
-    
-    // 仿真注入：触发方向盘 PTT 语音按键
-    void triggerPttVoice();
-}
+void registerListener(IVehicleEventListener listener);
+void unregisterListener(IVehicleEventListener listener);
+void injectMockSpeed(float speed);
+void injectMockGear(int gear);
+void injectMockPower(int state);
+void triggerPttVoice();
 ```
 
-#### 4.1.2 `IVehicleEventListener.aidl`
-车辆事件异步回调接口（客户端实现，单向异步 `oneway`）。
+`core/aidl/src/main/aidl/com/oem/car/middleware/IVehicleEventListener.aidl`
 
 ```aidl
-package com.oem.car.middleware;
-
 oneway interface IVehicleEventListener {
-    // 车速变化回调
     void onSpeedChanged(float speed);
-    
-    // 档位变化回调
     void onGearChanged(int gear);
-    
-    // 电源模式变化回调
     void onPowerStateChanged(int state);
-    
-    // 行车安全防分心拦截状态变化回调
     void onDistractionStateChanged(boolean isRestricted);
 }
 ```
 
----
+### 6.2 VehicleRepository（统一门面）
 
-### 4.2 车辆数据仓库接口 (`VehicleRepository.kt`)
-
-**路径**: `core/data/src/main/java/com/oem/car/core/data/VehicleRepository.kt`
+状态流：
 
 ```kotlin
-interface VehicleRepository {
-    // ---- 状态流 (StateFlows) ----
-    val isConnected: StateFlow<Boolean>                  // 车辆服务连接状态
-    val speedSignal: StateFlow<CarSignal<Float>>        // 车速信号 (km/h)
-    val gearSignal: StateFlow<CarSignal<VehicleGear>>   // 档位信号 (P/R/N/D)
-    val powerSignal: StateFlow<CarSignal<PowerState>>   // 电源状态
-    val uxRestrictionState: StateFlow<UxRestrictionState> // 防分心策略状态
-    val audioZoneState: StateFlow<AudioZoneState>       // 音频焦点与 PTT 状态
-    val climateState: StateFlow<ClimateState>           // 双区空调状态
-    val driveMode: StateFlow<DriveMode>                 // 驾驶模式 (ECO/COMFORT/SPORT)
-
-    // ---- 接口方法 (Methods) ----
-    fun initialize()                                    // 初始化仓库，建立车辆服务连接与信号监听
-    fun injectSpeed(speed: Float)                       // 注入/模拟车速变化
-    fun injectGear(gear: VehicleGear)                   // 注入/模拟档位变化
-    fun injectPower(powerState: PowerState)             // 注入/模拟电源模式迁移
-    fun triggerPtt()                                    // 触发/结束 PTT 语音会话
-    fun updateClimate(transform: (ClimateState) -> ClimateState) // 更新空调状态
-    fun setDriveMode(mode: DriveMode)                   // 切换驾驶模式
-}
+val isConnected: StateFlow<Boolean>
+val speedSignal: StateFlow<CarSignal<Float>>
+val gearSignal: StateFlow<CarSignal<VehicleGear>>
+val powerSignal: StateFlow<CarSignal<PowerState>>
+val uxRestrictionState: StateFlow<UxRestrictionState>
+val audioZoneState: StateFlow<AudioZoneState>
+val climateState: StateFlow<ClimateState>
+val driveMode: StateFlow<DriveMode>
+val digitalKeyState: StateFlow<DigitalKeyState>
+val telematicsState: StateFlow<TelematicsState>
+val adasState: StateFlow<AdasPerceptionState>
+val userProfile: StateFlow<UserProfile>
 ```
 
----
+命令：
 
-### 4.3 车辆服务连接管理 (`VehicleServiceConnectionManager.kt`)
+```kotlin
+fun initialize()
+fun injectSpeed(speed: Float)
+fun injectGear(gear: VehicleGear)
+fun injectPower(powerState: PowerState)
+fun triggerPtt()
+fun releasePtt()
+fun updateClimate(transform: (ClimateState) -> ClimateState)
+fun setDriveMode(mode: DriveMode)
+fun moveKeyCloser()
+fun moveKeyAway()
+fun cycleKeyTech()
+fun toggleDoorLock()
+fun toggleSentryMode()
+fun sendRemoteCommand(command: String)
+fun startOtaUpdate()
+fun toggleNoa()
+fun toggleLaneKeep()
+fun adjustCruiseSpeed(delta: Float)
+fun verifyDriverFace()
+fun cycleSeatPosition()
+fun adjustPreferredTemp(delta: Float)
+fun applyUserProfile()
+```
 
-**路径**: `core/vehicle-service/src/main/java/com/oem/car/core/vehicleservice/VehicleServiceConnectionManager.kt`
+### 6.3 扩展域 Manager
 
-* **主要职责**:
-  * 连接并绑定 `IVehicleCoreManager` 服务的 Binder 代理。
-  * 注册 `IBinder.DeathRecipient` 死亡监听。当 Binder 死亡（进程崩溃/服务异常）时，自动触发日志记录并在 3 秒后执行自动重连（`scheduleReconnect()`）。
-* **公共方法**:
-  * `fun connect()`: 发起服务连接与 Binder linkToDeath。
-  * `fun disconnect()`: 解绑服务与取消注册回调。
-  * `fun injectSpeed(speed: Float)` / `injectGear(gear: VehicleGear)` / `injectPower(powerState: PowerState)` / `triggerPtt()`: 代理发送测试指令。
+**DigitalKeyManager**
 
----
+- 区域顺序：`FAR(12m) → APPROACHING(8m) → WELCOME(4m) → UNLOCK(1.2m) → CABIN_INSIDE(0.5m)`
+- 进入 `UNLOCK` 自动解锁，离开到 `APPROACHING/FAR` 自动落锁。
+- 只有 `CABIN_INSIDE` 且 SE 鉴权通过才允许启动。
+- `cycleTech()` 在 `UWB → BLE → NFC` 之间切换。
 
-### 4.4 车规防分心安全引擎 (`CarUxRestrictionsEngine.kt`)
+**TelematicsManager**
 
-**路径**: `core/uxrestrictions/src/main/java/com/oem/car/core/uxrestrictions/CarUxRestrictionsEngine.kt`
+- 维护云连接、信号强度、哨兵模式、最近远程命令。
+- `startOtaUpdate()` 用协程模拟 OTA 全流程；同一时间只允许一个 OTA Job。
 
-* **主要职责**: 依据 GB 44495 及 NHTSA 车规标准评估行驶安全。
-* **核心评估逻辑**:
-  ```kotlin
-  fun evaluate(speed: Float, gear: VehicleGear) {
-      val isDriving = gear == VehicleGear.DRIVE || speed > 0.5f
-      val isHighSpeed = speed > 15.0f
+**AdasManager**
 
-      val newState = UxRestrictionState(
-          isRestricted = isDriving,
-          noVideo = isDriving,       // 行驶状态禁止视频播放
-          noKeyboard = isDriving,    // 行驶状态禁止使用全键盘
-          maxListLength = if (isHighSpeed) 5 else if (isDriving) 10 else Int.MAX_VALUE
-      )
-      // 状态变更更新 Flow
-  }
-  ```
+- `toggleNoa()`、`toggleLaneKeep()`、`adjustCruiseSpeed(delta)`。
+- 感知目标来自 `AdasPerceptionState.targets` 静态数据。
 
----
+**AccountManager**
 
-### 4.5 电源生命周期管理器 (`CarPowerLifecycleManager.kt`)
+- 初始 `isFaceIdVerified=false`，`verifyFace()` 置为已验证。
+- `cycleSeatPosition()` 在 1–4 之间循环。
+- `adjustPreferredTemp(delta)` 限制在 16–30°C。
+- `VehicleRepositoryImpl.applyUserProfile()` 会把偏好温度同步到主驾空调温度。
 
-**路径**: `core/power/src/main/java/com/oem/car/core/power/CarPowerLifecycleManager.kt`
+### 6.4 关键数据模型
 
-* **核心监听接口**:
-  ```kotlin
-  interface PowerStateListener {
-      fun onPrepareShutdown() {} // 关机预备
-      fun onSuspendToRam() {}    // STR 内存休眠挂起
-      fun onWakeUp() {}          // 系统唤醒恢复
-  }
-  ```
-* **核心公开方法**:
-  * `fun registerListener(listener: PowerStateListener)`
-  * `fun unregisterListener(listener: PowerStateListener)`
-  * `fun onPowerStateChanged(newState: PowerState)`: 处理电源状态迁移并通知各监听器。
-
----
-
-### 4.6 音频管理与 PTT 代理 (`CarAudioManagerDelegate.kt`)
-
-**路径**: `core/audio/src/main/java/com/oem/car/core/audio/CarAudioManagerDelegate.kt`
-
-* **核心公开方法**:
-  * `fun triggerPttEvent()`: 请求临时音频焦点，设置 `isPttActive = true`，并触发媒体音量 Ducking。
-  * `fun releasePttEvent()`: 释放 PTT 会话，恢复背景媒体音量。
+- `CarSignal<T>`：值 + `SignalStatus` + 时间戳 + `areaId`。
+- `VehicleGear`：P=1 / R=2 / N=4 / D=8。
+- `PowerState`：RUNNING / STR_SLEEP / GARAGE_MODE / SHUTDOWN_PREPARE。
+- `UxRestrictionState`：`isRestricted`、`noVideo`、`noKeyboard`、`maxListLength`。
+- 扩展域：`DigitalKeyState`、`TelematicsState`、`OtaState`、`AdasPerceptionState`、`PerceptionTarget`、`UserProfile`。
 
 ---
 
-## 📐 5. 关键数据模型定义 (Data Models)
+## 7. 与商业量产项目的差距
 
-位于 `core/model/src/main/java/com/oem/car/core/model/`:
+> 本项目补齐的是**扩展域的第一层仿真闭环**。距离量产座舱仍有四层差距。
 
-1. **`CarSignal<T>`**: 包装带有效性状态的车载信号。
-   ```kotlin
-   data class CarSignal<T>(
-       val value: T,
-       val status: SignalStatus = SignalStatus.VALID,
-       val timestamp: Long = System.currentTimeMillis()
-   )
-   ```
-2. **`VehicleGear`**: 档位枚举。
-   * `PARK (1)`: P (驻车)
-   * `REVERSE (2)`: R (倒车)
-   * `NEUTRAL (4)`: N (空档)
-   * `DRIVE (8)`: D (行车)
-3. **`PowerState`**: 车辆电源状态枚举。
-   * `RUNNING (0)`: NORMAL 运行中
-   * `STR_SLEEP (1)`: STR 内存休眠挂起
-   * `GARAGE_MODE (2)`: Garage Mode 车库维护模式
-   * `SHUTDOWN_PREPARE (3)`: 关机预备模式
-4. **`UxRestrictionState`**: 防分心管制状态。
-   * `isRestricted: Boolean`: 是否处于防分心限制中
-   * `noVideo: Boolean`: 是否禁止视频播放
-   * `noKeyboard: Boolean`: 是否禁止软键盘输入
-   * `maxListLength: Int`: 允许显示的最大列表条数 (5/10/Int.MAX_VALUE)
+### 7.1 车辆接入层（最关键）
+
+| 商业量产必备 | 当前状态 |
+| :--- | :--- |
+| CarService / VHAL / `CarPropertyManager` | 无 `android.car` 引用 |
+| 独立车辆服务进程 + `bindService` | 同进程 `object CarCoreDaemon` |
+| 属性读写、订阅、权限、areaId、超时、限流 | 只有 `injectMock*` 和内存 StateFlow |
+| 真实 ECU / CAN / Ethernet 信号 | 无 |
+
+### 7.2 系统 HMI 底座
+
+| 商业量产必备 | 当前状态 |
+| :--- | :--- |
+| CarSystemUI（状态栏、Dock、QS、音量、通知） | 无 |
+| CarLauncher（桌面、卡片、应用网格） | 无 |
+| 多屏 / OccupantZone / Presentation / 仪表独立显示 | 单 Activity 单屏，仪表是 Tab |
+| 多音区音频策略、焦点、路由、提示音 | 只有 PTT Ducking 布尔状态 |
+| 电源/热管理/STR/唤醒锁 | 只有电源状态机骨架 |
+| OTA（SOTA/FOTA、A/B、回滚） | 只有本地 OTA 进度动画 |
+| 安全启动、SELinux、Keystore、SecOC | 无 |
+| UDS/DTC/DoIP 诊断与日志抓取 | 无 |
+
+### 7.3 座舱业务域
+
+| 功能域 | 当前状态 | 量产要求 |
+| :--- | :--- | :--- |
+| 数字钥匙 | 区域/技术/门锁仿真 | CCC 3.0、UWB/BLE/NFC、SE/HSM、PKI、防中继 |
+| T-BOX / 云控 | 本地状态 + 假 OTA | 4G/5G、GNSS、MQTT/CoAP/TLS、eCall、哨兵回传 |
+| ADAS / SR | 本地 NOA/车道/巡航状态 | 感知融合、3D SR 渲染、AR-HUD、功能安全 |
+| DMS / Profile | 本地人脸与偏好仿真 | 摄像头人脸识别、座椅/后视镜联动、隐私合规 |
+| 空调 | UI 本地状态 | HVAC 服务、风门/压缩机/多区控制、实车标定 |
+| 媒体 | UI 播放占位 | MediaSession、音源管理、收音机、USB/流媒体 |
+| 导航 | 静态 TBT 文案 | 地图引擎、离线/在线导航、EV 充电路径 |
+| 语音 | 浮层占位 | 唤醒词、ASR、NLU、TTS、技能生态 |
+| 电话/蓝牙 | 无 | HFP、通讯录、通话 UI、蓝牙连接管理 |
+| 投屏 | 无 | CarPlay / HiCar / Android Auto |
+| 相机 | 无 | AVM、DVR、哨兵 |
+| 能量管理 | 无 | 电池、充电、热管理、续航 |
+| 账户 | 本地 Profile | 账号体系、云端同步、多用户隔离 |
+
+### 7.4 量产工程体系
+
+| 能力 | 当前状态 |
+| :--- | :--- |
+| 单元/集成/UI/HIL 测试 | 无 |
+| CI/CD、签名、发布、灰度 | 无 |
+| 性能/内存/启动/稳定性基线 | 无 |
+| 日志、埋点、远程诊断 | 无 |
+| ISO 26262 / ISO 21434 / GB 44495 / GB 44496 等流程 | 无 |
+
+> 说明：行车防分心规则在本项目中是**演示阈值**，参考 NHTSA Driver Distraction Guidelines；GB 44495 是整车信息安全要求，不应作为驾驶员分心判定依据。旧版 README 与代码中的相关引用已修正。
+
+---
+
+## 8. 已知限制
+
+1. **IPC 是仿真**：`CarCoreDaemon.asBinder()` 同进程直连，`DeathRecipient` 不会因进程崩溃触发。
+2. **服务端实现渗入客户端**：`:core:vehicle-service` 依赖 `:core:vehicle`，AIDL 抽象不彻底。
+3. **只有 Dashboard 触发初始化**：默认 Tab 保证启动时会执行，但架构上其他入口不应依赖这一点。
+4. **安全策略双份**：`CarCoreDaemon.checkSafetyPolicy()` 与 `CarUxRestrictionsEngine.evaluate()` 各算一套；`VehiclePropertyAdapter.distractionSignal` 当前无消费者。
+5. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
+6. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
+7. **无测试**：仓库没有 `src/test` 或 `src/androidTest`。
+8. **仓库卫生**：历史构建产物仍被 git 跟踪；`CommercialCarApp/` 是未跟踪的迁移残留（无源码），不建议打开。
+
+---
+
+## 9. 构建与运行
+
+### 环境要求
+
+- JDK 17
+- Android SDK Platform 34
+- Gradle 8.4（仓库自带 wrapper）
+
+### 构建
+
+```bash
+# Windows Git Bash
+export ANDROID_HOME=D:/SDK
+./gradlew :app:assembleDebug
+```
+
+产物：
+
+```text
+app/build/outputs/apk/debug/app-debug.apk
+```
+
+说明：`local.properties` 未入库，构建时通过 `ANDROID_HOME` 或 IDE 的 SDK 配置提供路径。
+
+### 运行
+
+- 安装到 Android 模拟器或真机即可，无需连接车辆。
+- 所有能力均为本地仿真；没有网络、蓝牙、UWB、摄像头依赖。
+
+---
+
+## 10. 后续演进路线（建议）
+
+1. **真实车辆接入**：拆出独立 `service/vehicle-service` 进程，客户端只依赖 `:core:aidl`；用 `CarPropertyManager`/VHAL 适配层替换 `CarCoreDaemon`，保留 mock 作为 debug 实现。
+2. **系统 HMI**：补 CarSystemUI、CarLauncher、多屏/仪表独立显示、OccupantZone。
+3. **平台能力**：多音区音频策略、电源/热管理、诊断日志、安全底座、真实 OTA。
+4. **业务量产化**：数字钥匙 CCC 3.0、T-BOX 云通道、ADAS/SR、DMS/Profile、导航/媒体/语音/电话/投屏。
+5. **工程体系**：fake VHAL、单测/集成/HIL、CI/CD、性能基线、合规流程。

@@ -4,7 +4,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,7 @@ import com.oem.car.core.designsystem.CarButton
 import com.oem.car.core.designsystem.CarTheme
 import com.oem.car.feature.climate.ClimateScreen
 import com.oem.car.feature.cluster.ClusterScreen
+import com.oem.car.feature.connected.ConnectedScreen
 import com.oem.car.feature.dashboard.DashboardScreen
 import com.oem.car.feature.media.MediaScreen
 import com.oem.car.feature.settings.SettingsScreen
@@ -34,11 +37,12 @@ class MainActivity : ComponentActivity() {
 
 
 enum class CockpitTab(val title: String) {
-    DASHBOARD("中控仪表"),
-    CLUSTER("液晶仪表(2屏)"),
-    CLIMATE("空调HVAC"),
-    MEDIA("多媒体影音"),
-    SETTINGS("车辆设置")
+    DASHBOARD("中控"),
+    CLUSTER("仪表"),
+    CLIMATE("空调"),
+    MEDIA("影音"),
+    CONNECTED("互联"),
+    SETTINGS("设置")
 }
 
 @Composable
@@ -53,12 +57,13 @@ fun MainCockpitNavigationHost() {
                     .fillMaxWidth()
                     .height(64.dp)
                     .background(Color(0xFF141820))
-                    .padding(horizontal = 16.dp),
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("🚘 AAOS Cockpit OS", color = Color(0xFF00E5FF), fontSize = 16.sp)
-                Spacer(modifier = Modifier.width(16.dp))
+                Text("🚘 AAOS Cockpit", color = Color(0xFF00E5FF), fontSize = 16.sp)
+                Spacer(modifier = Modifier.width(8.dp))
 
                 CockpitTab.entries.forEach { tab ->
                     val isSelected = selectedTab == tab
@@ -81,6 +86,7 @@ fun MainCockpitNavigationHost() {
                     CockpitTab.CLUSTER -> ClusterScreen()
                     CockpitTab.CLIMATE -> ClimateScreen()
                     CockpitTab.MEDIA -> MediaScreen()
+                    CockpitTab.CONNECTED -> ConnectedScreen()
                     CockpitTab.SETTINGS -> SettingsScreen()
                 }
             }

@@ -19,5 +19,9 @@ dependencies {
     implementation(project(":core:uxrestrictions"))
     implementation(project(":core:power"))
     implementation(project(":core:audio"))
+    implementation(project(":core:digitalkey"))
+    implementation(project(":core:telematics"))
+    implementation(project(":core:adas"))
+    implementation(project(":core:account"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
 }

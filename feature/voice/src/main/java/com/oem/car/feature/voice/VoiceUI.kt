@@ -55,7 +55,7 @@ fun VoiceAssistantOverlay(
                     Text("智能语音助手正在倾听...", color = Color.White, fontSize = 20.sp)
                     Text("已成功挂起背景音乐 (Duck Music Focus)", color = Color.Magenta, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(16.dp))
-                    CarButton("完成对话", onClick = { repository.triggerPtt() })
+                    CarButton("完成对话", onClick = { repository.releasePtt() })
                 }
             }
         }

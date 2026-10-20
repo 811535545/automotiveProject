@@ -106,7 +106,7 @@ fun DashboardScreen(
                         if (uxRestriction.noVideo) {
                             Text("🛑 行车视频安全拦截生效", color = Color.Red, fontSize = 22.sp)
                             Spacer(modifier = Modifier.height(8.dp))
-                            Text("GB 44495 / NHTSA: 移动状态禁止播放影音", color = Color.Gray, fontSize = 14.sp)
+                            Text("行车安全策略：移动状态禁止播放影音", color = Color.Gray, fontSize = 14.sp)
                         } else {
                             Text("🎬 乘客影音系统 (P档独享)", color = Color.Green, fontSize = 22.sp)
                             Spacer(modifier = Modifier.height(8.dp))

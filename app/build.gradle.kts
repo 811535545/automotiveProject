@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":feature:cluster"))
     implementation(project(":feature:climate"))
     implementation(project(":feature:media"))
+    implementation(project(":feature:connected"))
     implementation(project(":feature:settings"))
     implementation(project(":feature:voice"))
 

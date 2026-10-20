@@ -55,7 +55,7 @@ fun CarButton(
 @Composable
 fun SafetyBadge(isRestricted: Boolean, modifier: Modifier = Modifier) {
     val color = if (isRestricted) Color(0xFFFF5252) else Color(0xFF00E676)
-    val text = if (isRestricted) "⚠️ 车规安全防御开启 (GB 44495)" else "✅ 安全允许"
+    val text = if (isRestricted) "⚠️ 行车防分心策略已启用" else "✅ 安全允许"
 
     Box(
         modifier = modifier

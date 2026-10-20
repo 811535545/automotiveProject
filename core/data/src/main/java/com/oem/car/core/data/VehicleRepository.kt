@@ -12,12 +12,31 @@ interface VehicleRepository {
     val audioZoneState: StateFlow<AudioZoneState>
     val climateState: StateFlow<ClimateState>
     val driveMode: StateFlow<DriveMode>
+    val digitalKeyState: StateFlow<DigitalKeyState>
+    val telematicsState: StateFlow<TelematicsState>
+    val adasState: StateFlow<AdasPerceptionState>
+    val userProfile: StateFlow<UserProfile>
 
     fun initialize()
     fun injectSpeed(speed: Float)
     fun injectGear(gear: VehicleGear)
     fun injectPower(powerState: PowerState)
     fun triggerPtt()
+    fun releasePtt()
     fun updateClimate(transform: (ClimateState) -> ClimateState)
     fun setDriveMode(mode: DriveMode)
+    fun moveKeyCloser()
+    fun moveKeyAway()
+    fun cycleKeyTech()
+    fun toggleDoorLock()
+    fun toggleSentryMode()
+    fun sendRemoteCommand(command: String)
+    fun startOtaUpdate()
+    fun toggleNoa()
+    fun toggleLaneKeep()
+    fun adjustCruiseSpeed(delta: Float)
+    fun verifyDriverFace()
+    fun cycleSeatPosition()
+    fun adjustPreferredTemp(delta: Float)
+    fun applyUserProfile()
 }

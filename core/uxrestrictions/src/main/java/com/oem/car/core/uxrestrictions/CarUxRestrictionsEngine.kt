@@ -12,7 +12,7 @@ class CarUxRestrictionsEngine {
     val uxRestrictionState: StateFlow<UxRestrictionState> = _uxRestrictionState.asStateFlow()
 
     fun evaluate(speed: Float, gear: VehicleGear) {
-        // 车规安全防分心逻辑 (遵循 GB 44495 / NHTSA 标准)
+        // 演示用防分心规则：参考 NHTSA Driver Distraction Guidelines，阈值为演示值而非法规符合性实现
         val isDriving = gear == VehicleGear.DRIVE || speed > 0.5f
         val isHighSpeed = speed > 15.0f
 
