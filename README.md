@@ -25,7 +25,7 @@
 - 没有 CarSystemUI、Launcher、多显示屏、副驾/后排 RSE。
 - 没有真实数字钥匙协议（CCC 3.0 / UWB / BLE / NFC / SE）、真实 T-BOX 云通道、真实 OTA、真实 ADAS 感知与 3D SR 渲染。
 - 没有真实地图引擎、蓝牙 HFP/PBAP 链路、BMS/充电桩协议、UDS/DoIP 诊断链路；导航、电话、能量、健康四个页面均为**主进程内状态仿真**。
-- 没有测试体系、CI、签名发布、功能安全/信息安全流程。
+- 没有完整测试体系（目前仅有安全策略 JVM 单测）、CI、签名发布、功能安全/信息安全流程。
 
 因此：**它适合做架构演示、AAOS 学习、面试项目；不能直接作为量产座舱交付。**
 
@@ -108,7 +108,7 @@ automotiveProject/
 | `:core:phone` | 蓝牙连接、拨号/来电状态机、通话计时、静音 | 仿真闭环 |
 | `:core:energy` | SOC/续航联动、充电限值、充电进度、预约与预热 | 仿真闭环 |
 | `:core:health` | 胎压、系统自检、DTC 扫描/清除 | 仿真闭环 |
-| `:core:model` | `CarSignal<T>` 及所有业务数据类 | 完整 |
+| `:core:model` | `CarSignal<T>`、业务数据类、`DrivingSafetyPolicy` 共享规则 | 完整 |
 | `:core:designsystem` | 车规大触控组件与深色主题 | 可用 |
 | `:core:common` | 日志、调度器、Result | 可用 |
 | `:feature:*` | 各业务页面 | Dashboard/Connected/导航/电话/能量/健康/空调/影音/设置可交互；仪表以展示为主；语音为 PTT 浮层 |
@@ -130,7 +130,7 @@ app
  │     │     ├── core:navigation / phone / energy / health
  │     │     └── core:common / model
  │     └── core:designsystem / common / model
- ├── core:vehicle ──► core:aidl        // 仅用于把服务实现打进同一 APK，由 :vehicle 进程加载
+ ├── core:vehicle ──► core:aidl / core:model   // 仅用于把服务实现打进同一 APK，由 :vehicle 进程加载
  ├── core:common / model
  └── core:designsystem ──► core:model
 
@@ -173,7 +173,7 @@ Dashboard Injector（主进程）
               └── IVehicleCoreManager.Proxy.transact(...) ── Binder IPC ──►
                     CarCoreDaemon.injectMockSpeed / injectMockGear / injectMockPower（:vehicle 进程）
                       ├── 更新内部 StateFlow
-                      ├── checkSafetyPolicy()          // 仅速度/档位注入触发
+                      ├── checkSafetyPolicy()          // 仅速度/档位注入触发，规则来自 DrivingSafetyPolicy
                       └── dispatch(RemoteCallbackList)
                             └── oneway onSpeedChanged / onGearChanged / ...
                                   └── 客户端 Binder 线程
@@ -480,6 +480,7 @@ fun clearDtcs()
 
 - `CarSignal<T>`：值 + `SignalStatus` + 时间戳 + `areaId`。
 - `VehicleGear`：P=1 / R=2 / N=4 / D=8。
+- 行车防分心规则：`DrivingSafetyPolicy.isDriving()`（D 档或 >0.5 km/h）与 `maxListLength()`（高速 >15 km/h 时 5 条，否则行车 10 条，驻车不限）。
 - `PowerState`：RUNNING / STR_SLEEP / GARAGE_MODE / SHUTDOWN_PREPARE。
 - `UxRestrictionState`：`isRestricted`、`noVideo`、`noKeyboard`、`maxListLength`。
 - 座舱基础域：`AudioZoneState`（PTT/Ducking）、`ClimateState`（双区温度/风量）、`DriveMode`（ECO/COMFORT/SPORT/CUSTOM）。
@@ -539,7 +540,7 @@ fun clearDtcs()
 
 | 能力 | 当前状态 |
 | :--- | :--- |
-| 单元/集成/UI/HIL 测试 | 无 |
+| 单元/集成/UI/HIL 测试 | 已有安全策略 JVM 单测（`DrivingSafetyPolicyTest` 8 例、`CarUxRestrictionsEngineTest` 5 例）；无集成/UI/HIL 测试 |
 | CI/CD、签名、发布、灰度 | 无 |
 | 性能/内存/启动/稳定性基线 | 无 |
 | 日志、埋点、远程诊断 | 仅 Logcat 本地日志（CarLogger）；无埋点、远程诊断 |
@@ -550,7 +551,7 @@ fun clearDtcs()
 ### 7.5 商业化功能缺口清单（量化）
 
 > 计数口径：按“可独立交付/验收的功能条目”统计，不按代码行数或页面数。同一能力在不同域重复出现时只计一次主责域。
-> **当前缺口：功能层 121 项 + 工程体系 12 项 = 133 项。** 完成“独立 `:vehicle` 进程 + `bindService`”后，平台与系统层缺口由 28 项降为 27 项；导航、电话、能量、健康仍为 L1 仿真闭环，每个域还缺 5–8 项量产能力。
+> **当前缺口：功能层 121 项 + 工程体系 11 项 = 132 项。** 完成“独立 `:vehicle` 进程 + `bindService`”后，平台与系统层缺口由 28 项降为 27 项；补上安全策略 JVM 单测后，工程体系缺口由 12 项降为 11 项。导航、电话、能量、健康仍为 L1 仿真闭环，每个域还缺 5–8 项量产能力。
 
 #### 7.5.1 平台与系统层（27 项）
 
@@ -584,11 +585,11 @@ fun clearDtcs()
 | 设置 | 驾驶模式 + ADAS 静态展示 | 5 | 显示/声音/网络/蓝牙/Wi-Fi；语言/时间/单位；账号/隐私权限；恢复出厂/诊断入口；多车型配置 |
 | 仪表 | 车速/档位/TBT/ADAS 文案 | 5 | 独立屏渲染；全量报警灯；能耗/行程曲线；主题/布局切换；故障文字提示 |
 
-#### 7.5.3 工程体系（12 项）
+#### 7.5.3 工程体系（11 项）
 
 | 能力 | 当前状态 |
 | :--- | :--- |
-| 单元测试 / 集成与 UI 测试 / HIL 台架 | 均无（3 项） |
+| 单元测试 / 集成与 UI 测试 / HIL 台架 | 安全策略 JVM 单测已补（2 个测试类、13 个用例）；集成/UI/HIL 无（2 项） |
 | CI/CD / 签名发布与灰度 / 性能与启动基线 / 稳定性长稳 | 均无（4 项） |
 | 日志埋点与远程可观测 / 多车型配置与国际化 | 仅 Logcat 本地日志；无埋点/远程可观测，也无多车型配置/国际化（2 项） |
 | ISO 26262 功能安全 / ISO 21434 与 GB 44495/44496 信息安全 / 隐私合规 | 无（3 项） |
@@ -631,16 +632,15 @@ fun clearDtcs()
 3. **服务端状态只在内存**：`:vehicle` 重建后 speed/gear/power 回到默认值，客户端靠注册快照恢复；没有持久化与状态恢复。
 4. **PTT 没有跨进程回传**：`triggerPttVoice()` 只更新服务端 `_voiceTriggerEvent`，目前无消费者；语音浮层由主进程 `CarAudioManagerDelegate.isPttActive` 驱动。
 5. **重连策略固定**：`RECONNECT_DELAY_MS=3000`，没有指数退避、最大重试、电量/网络感知；`am crash`/`kill -9` 场景已实测，系统级低内存回收未覆盖。
-6. **安全策略双份**：`CarCoreDaemon.checkSafetyPolicy()` 与 `CarUxRestrictionsEngine.evaluate()` 各算一套；`VehiclePropertyAdapter.distractionSignal` 当前无消费者。
-7. **服务端并发与广播收尾待加固**：`checkSafetyPolicy()` 的读-改-写不是原子操作；`dispatch()` 的 `finishBroadcast()` 未放在 `finally`，回调抛出 `Error` 时会跳过收尾。
-8. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
-9. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
-10. **无自动化测试**：仓库没有 `src/test` 或 `src/androidTest`；当前只有 `scripts/verify_ipc.sh` 做启动/崩溃重连的脚本化验证，未接入 CI。
-11. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码，仅构建/IDE 缓存），不建议打开。
-12. **四个新域是仿真**：导航没有地图引擎/定位，电话没有真实 HFP/PBAP，能量没有 BMS/充电桩协议，健康没有 UDS/DoIP；页面说明中也标注了“仿真模式”。
-13. **Tab 栏支持横向滚动**：顶部 Tab 栏已启用 `horizontalScroll`；当前模拟器宽度可完整显示 10 个 Tab，但在窄屏或更大字体/显示密度下可能超出宽度，此时可横向滑动访问右侧 Tab。
-14. **跨 Tab 联动靠内存状态**：导航路线、通话、充电、故障码均只存在于主进程内，App 重启即丢失。
-15. **健康演示数据不一致**：胎压卡显示右后 2.1 bar 偏低，而扫描出的 DTC `B1A00` 文案写“右前轮胎压偏低”；两处均为静态演示数据，未与真实传感器绑定。
+6. **服务端并发与广播收尾待加固**：`checkSafetyPolicy()` 的读-改-写不是原子操作；`dispatch()` 的 `finishBroadcast()` 未放在 `finally`，回调抛出 `Error` 时会跳过收尾。
+7. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
+8. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
+9. **测试覆盖仍很薄**：已有安全策略 JVM 单测（13 个用例），但没有 AIDL 跨进程集成测试、UI 测试、HIL，也未接入 CI；`scripts/verify_ipc.sh` 仍是手工执行。
+10. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码，仅构建/IDE 缓存），不建议打开。
+11. **四个新域是仿真**：导航没有地图引擎/定位，电话没有真实 HFP/PBAP，能量没有 BMS/充电桩协议，健康没有 UDS/DoIP；页面说明中也标注了“仿真模式”。
+12. **Tab 栏支持横向滚动**：顶部 Tab 栏已启用 `horizontalScroll`；当前模拟器宽度可完整显示 10 个 Tab，但在窄屏或更大字体/显示密度下可能超出宽度，此时可横向滑动访问右侧 Tab。
+13. **跨 Tab 联动靠内存状态**：导航路线、通话、充电、故障码均只存在于主进程内，App 重启即丢失。
+14. **健康演示数据不一致**：胎压卡显示右后 2.1 bar 偏低，而扫描出的 DTC `B1A00` 文案写“右前轮胎压偏低”；两处均为静态演示数据，未与真实传感器绑定。
 
 ---
 
@@ -658,6 +658,9 @@ fun clearDtcs()
 # Windows Git Bash
 export ANDROID_HOME=D:/SDK
 ./gradlew :app:assembleDebug
+
+# 安全策略 JVM 单测（不需要模拟器）
+./gradlew :core:model:testDebugUnitTest :core:uxrestrictions:testDebugUnitTest
 ```
 
 产物：
@@ -710,7 +713,7 @@ adb shell am crash --user 10 "$(adb shell pidof com.oem.car.app:vehicle | tr -d 
 ## 10. 后续演进路线（建议）
 
 1. **车辆接入深化**：独立 `:vehicle` 进程 + `bindService` + AIDL + 崩溃重连已完成；下一步用 `CarPropertyManager`/VHAL 适配层替换 `CarCoreDaemon`，补权限/调用方校验、AIDL 版本、多客户端与状态持久化，保留 mock 作为 debug 实现。
-2. **自动化验证**：把 `scripts/verify_ipc.sh` 接入 CI；补 `checkSafetyPolicy` 单测、AIDL 跨进程集成测试、启动/重连长稳测试。
+2. **自动化验证**：安全策略 JVM 单测已完成（13 个用例）；下一步把单测与 `scripts/verify_ipc.sh` 接入 CI，再补 AIDL 跨进程集成测试、启动/重连长稳测试。
 3. **系统 HMI**：补 CarSystemUI、CarLauncher、多屏/仪表独立显示、OccupantZone。
 4. **平台能力**：多音区音频策略、电源/热管理、诊断日志、安全底座、真实 OTA。
 5. **业务量产化**：数字钥匙 CCC 3.0、T-BOX 云通道、ADAS/SR、DMS/Profile、真实导航与媒体/语音/电话/投屏、能量管理、健康诊断。

@@ -11,9 +11,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    testOptions {
+        // CarUxRestrictionsEngine 会调用 CarLogger -> android.util.Log；
+        // JVM 单测里让 Android 方法返回默认值，避免 "Method not mocked"。
+        unitTests.isReturnDefaultValues = true
+    }
 }
 dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    testImplementation("junit:junit:4.13.2")
 }

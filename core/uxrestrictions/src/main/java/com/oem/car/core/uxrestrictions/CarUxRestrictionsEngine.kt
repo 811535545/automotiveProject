@@ -1,6 +1,7 @@
 package com.oem.car.core.uxrestrictions
 
 import com.oem.car.core.common.CarLogger
+import com.oem.car.core.model.DrivingSafetyPolicy
 import com.oem.car.core.model.UxRestrictionState
 import com.oem.car.core.model.VehicleGear
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,15 +13,14 @@ class CarUxRestrictionsEngine {
     val uxRestrictionState: StateFlow<UxRestrictionState> = _uxRestrictionState.asStateFlow()
 
     fun evaluate(speed: Float, gear: VehicleGear) {
-        // 演示用防分心规则：参考 NHTSA Driver Distraction Guidelines，阈值为演示值而非法规符合性实现
-        val isDriving = gear == VehicleGear.DRIVE || speed > 0.5f
-        val isHighSpeed = speed > 15.0f
+        // 演示用防分心规则：与 CarCoreDaemon 共用 DrivingSafetyPolicy，避免两套阈值分叉
+        val isDriving = DrivingSafetyPolicy.isDriving(gear, speed)
 
         val newState = UxRestrictionState(
             isRestricted = isDriving,
             noVideo = isDriving,
             noKeyboard = isDriving,
-            maxListLength = if (isHighSpeed) 5 else if (isDriving) 10 else Int.MAX_VALUE
+            maxListLength = DrivingSafetyPolicy.maxListLength(gear, speed)
         )
 
         if (_uxRestrictionState.value != newState) {

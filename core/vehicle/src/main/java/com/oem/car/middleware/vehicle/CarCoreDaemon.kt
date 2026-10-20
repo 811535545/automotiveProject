@@ -5,6 +5,7 @@ import android.os.Process
 import android.os.RemoteCallbackList
 import android.os.RemoteException
 import android.util.Log
+import com.oem.car.core.model.DrivingSafetyPolicy
 import com.oem.car.middleware.IVehicleCoreManager
 import com.oem.car.middleware.IVehicleEventListener
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -284,8 +285,8 @@ class CarCoreDaemon : IVehicleCoreManager.Stub() {
      * 如果未来多客户端并发注入，可能出现两个线程交错读写，需要加锁或串行化。
      */
     private fun checkSafetyPolicy() {
-        // 车规防分心：D档(8) 或 速度 > 0.5km/h 触发拦截
-        val restricted = _gear.value == 8 || _speed.value > 0.5f
+        // 车规防分心：D 档或速度 > 0.5km/h 触发拦截；规则与客户端共用 DrivingSafetyPolicy
+        val restricted = DrivingSafetyPolicy.isDriving(_gear.value, _speed.value)
         if (_isRestricted.value != restricted) {
             _isRestricted.value = restricted
             dispatch { it.onDistractionStateChanged(restricted) }
