@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+
 enum class CockpitTab(val title: String) {
     DASHBOARD("中控仪表"),
     CLUSTER("液晶仪表(2屏)"),
