@@ -29,6 +29,7 @@
             <option value="$PROJECT_DIR$/feature" />
             <option value="$PROJECT_DIR$/feature/climate" />
             <option value="$PROJECT_DIR$/feature/cluster" />
+            <option value="$PROJECT_DIR$/feature/connected" />
             <option value="$PROJECT_DIR$/feature/dashboard" />
             <option value="$PROJECT_DIR$/feature/media" />
             <option value="$PROJECT_DIR$/feature/settings" />
