@@ -12,13 +12,17 @@
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
             <option value="$PROJECT_DIR$/core" />
+            <option value="$PROJECT_DIR$/core/account" />
+            <option value="$PROJECT_DIR$/core/adas" />
             <option value="$PROJECT_DIR$/core/aidl" />
             <option value="$PROJECT_DIR$/core/audio" />
             <option value="$PROJECT_DIR$/core/common" />
             <option value="$PROJECT_DIR$/core/data" />
             <option value="$PROJECT_DIR$/core/designsystem" />
+            <option value="$PROJECT_DIR$/core/digitalkey" />
             <option value="$PROJECT_DIR$/core/model" />
             <option value="$PROJECT_DIR$/core/power" />
+            <option value="$PROJECT_DIR$/core/telematics" />
             <option value="$PROJECT_DIR$/core/uxrestrictions" />
             <option value="$PROJECT_DIR$/core/vehicle" />
             <option value="$PROJECT_DIR$/core/vehicle-service" />

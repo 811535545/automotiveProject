@@ -1,6 +1,6 @@
 # CommercialCarApp - AAOS 智能座舱中间件与应用项目文档
 
-本文档详细介绍了 CommercialCarApp 项目的目录结构、各模块作用注释、项目入口点及核心接口 API 说明。
+本文档详细介绍了 CommercialCarApp 项目的目录结构、各模块作用注释、项目入口点、核心接口 API 说明，以及对比**商业量产级车载项目**缺失的功能模块（如数字钥匙、T-BOX 远程控车、ADAS 3D 渲染等）分析。
 
 ---
 
@@ -55,16 +55,53 @@ CommercialCarApp/
 
 ---
 
-## 🚪 2. 项目入口与核心调用链 (Project Entry Point)
+## 🔑 2. 与商业量产级项目的差距分析 (Missing Commercial Capabilities)
 
-### 2.1 主入口文件
+相较于上路量产的整车智能座舱系统，当前项目作为架构原型/中间件 Demo，在以下商业级核心模块和能力上仍需补充扩展：
+
+### 2.1 🔑 数字钥匙与无感进出 (Digital Key System)
+* **CCC 3.0 规范标准**: 商业级项目需遵循 **CCC (Car Connectivity Consortium) Digital Key 3.0** 及 ICCCE 行业标准。
+* **多无线技术融合**:
+  * **UWB (超宽带)**: 厘米级高精度定位与测距，实现靠近无感解锁、灯光迎宾、离车自动落锁。
+  * **BLE (低功耗蓝牙)**: 远距离连接保活、车况预查询、辅助测距。
+  * **NFC (近场通信)**: B 柱贴刷紧急解锁、手机断电无电解锁。
+* **安全芯片 (SE) 与 PKI**: 依赖车端 **SE (Secure Element)** 安全芯片与 HSM (硬件安全模块) 存储私钥与非对称加密证书，防止中继攻击 (Relay Attack)。
+* **架构层级**: 车端数字钥匙 ECU -> CAN/Ethernet -> VHAL -> CarKey Service -> Android App / Wallet 接入。
+
+### 2.2 📡 车联网与远程控制 (Telematics / T-BOX / Cloud)
+* **T-BOX (Telematics Box) 硬件通信**: 4G/5G 蜂窝网络、GNSS 高精定位、eCall 紧急呼叫。
+* **远控协议 (Remote Control)**: 采用 MQTT / CoAP / TLS 加密双向通道，实现手机 APP 远程开空调、锁车门、预约充电、哨兵模式 (Sentry Mode) 摄像头画面回传。
+* **OTA (Over-The-Air) 升级管理**:
+  * **FOTA (固件升级)**: 智能网关协调全车 30+ 个 ECU 的固件刷写。
+  * **SOTA (软件升级)**: AAOS 系统镜像与应用差分升级（A/B 双分区无感升级与回滚保护）。
+
+### 2.3 🛡️ ADAS 智驾协同与 3D 环境重构 (ADAS & SR Rendering)
+* **SR (Scene Rendering) 3D 车道重构**: 将毫米波雷达、激光雷达与摄像头感知数据通过渲染引擎 (Unity / Unreal / Canvas) 实时绘制在仪表屏/HUD 屏上（车道线、行人、临车、锥桶）。
+* **AR-HUD (增强现实抬头显示)**: 导航引导箭头与真实路面贴合显示。
+
+### 2.4 🎨 CarSystemUI 车规系统定制 (Custom SystemUI & Multi-Display)
+* **定制化 SystemUI**: 包含顶部 Status Bar、底部 HVAC 控制 Dock Bar、下拉 Quick Settings 快捷面板、Volume Bar。
+* **窗口与多屏协同**: 屏间互联拖拽 (中控与副驾屏/后排娱乐屏 RSE 视频推屏)、CarPlay / HiCar / Android Auto 手机映射通道。
+
+### 2.5 👤 多账户与个性化座舱 (Profile & Account System)
+* **DMS 摄像头人脸识别**: 驾驶员上车人脸识别自动切换 Profile，联动调节座椅记忆位置、后视镜角度、空调温度、氛围灯与偏好音乐。
+
+### 2.6 🛠️ 车规诊断与信息安全 (UDS, ISO 26262, ISO 21434)
+* **UDS 诊断 (ISO 14229)**: 读取/清除 DTC 故障码、数据流读取及 Routine Control 测试。
+* **SecOC 报文鉴权与车载防火墙**: 防止 CAN 总线注入与网络安全入侵。
+
+---
+
+## 🚪 3. 项目入口与核心调用链 (Project Entry Point)
+
+### 3.1 主入口文件
 * **路径**: `app/src/main/java/com/oem/car/app/MainActivity.kt`
 * **入口 Activity**: `MainActivity`
 * **界面结构**:
   * 顶部导航栏 (Automotive Dock Bar): 64dp 高度，提供中控仪表、液晶仪表、空调 HVAC、多媒体影音、车辆设置 5 大 Tab 切换。
   * 悬浮覆盖层 (Overlay): `VoiceAssistantOverlay()` 全局置顶，用于响应语音 PTT 事件。
 
-### 2.2 核心数据流架构 (Data Flow Architecture)
+### 3.2 核心数据流架构 (Data Flow Architecture)
 
 ```
 [UI 层: Dashboard / Climate / Media / Cluster]
@@ -85,11 +122,11 @@ CommercialCarApp/
 
 ---
 
-## 🔌 3. 核心接口文档 (API Reference)
+## 🔌 4. 核心接口文档 (API Reference)
 
-### 3.1 IPC Binder AIDL 接口
+### 4.1 IPC Binder AIDL 接口
 
-#### 3.1.1 `IVehicleCoreManager.aidl`
+#### 4.1.1 `IVehicleCoreManager.aidl`
 车辆核心服务管理接口（服务端实现）。
 
 ```aidl
@@ -118,7 +155,7 @@ interface IVehicleCoreManager {
 }
 ```
 
-#### 3.1.2 `IVehicleEventListener.aidl`
+#### 4.1.2 `IVehicleEventListener.aidl`
 车辆事件异步回调接口（客户端实现，单向异步 `oneway`）。
 
 ```aidl
@@ -141,7 +178,7 @@ oneway interface IVehicleEventListener {
 
 ---
 
-### 3.2 车辆数据仓库接口 (`VehicleRepository.kt`)
+### 4.2 车辆数据仓库接口 (`VehicleRepository.kt`)
 
 **路径**: `core/data/src/main/java/com/oem/car/core/data/VehicleRepository.kt`
 
@@ -170,7 +207,7 @@ interface VehicleRepository {
 
 ---
 
-### 3.3 车辆服务连接管理 (`VehicleServiceConnectionManager.kt`)
+### 4.3 车辆服务连接管理 (`VehicleServiceConnectionManager.kt`)
 
 **路径**: `core/vehicle-service/src/main/java/com/oem/car/core/vehicleservice/VehicleServiceConnectionManager.kt`
 
@@ -184,7 +221,7 @@ interface VehicleRepository {
 
 ---
 
-### 3.4 车规防分心安全引擎 (`CarUxRestrictionsEngine.kt`)
+### 4.4 车规防分心安全引擎 (`CarUxRestrictionsEngine.kt`)
 
 **路径**: `core/uxrestrictions/src/main/java/com/oem/car/core/uxrestrictions/CarUxRestrictionsEngine.kt`
 
@@ -207,7 +244,7 @@ interface VehicleRepository {
 
 ---
 
-### 3.5 电源生命周期管理器 (`CarPowerLifecycleManager.kt`)
+### 4.5 电源生命周期管理器 (`CarPowerLifecycleManager.kt`)
 
 **路径**: `core/power/src/main/java/com/oem/car/core/power/CarPowerLifecycleManager.kt`
 
@@ -226,7 +263,7 @@ interface VehicleRepository {
 
 ---
 
-### 3.6 音频管理与 PTT 代理 (`CarAudioManagerDelegate.kt`)
+### 4.6 音频管理与 PTT 代理 (`CarAudioManagerDelegate.kt`)
 
 **路径**: `core/audio/src/main/java/com/oem/car/core/audio/CarAudioManagerDelegate.kt`
 
@@ -236,7 +273,7 @@ interface VehicleRepository {
 
 ---
 
-## 📐 4. 关键数据模型定义 (Data Models)
+## 📐 5. 关键数据模型定义 (Data Models)
 
 位于 `core/model/src/main/java/com/oem/car/core/model/`:
 
