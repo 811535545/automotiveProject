@@ -1,6 +1,6 @@
 # CommercialCarApp — AAOS 智能座舱仿真架构
 
-> 本文档对应**仓库根目录**的实际工程（`E:\gitHub\automotiveProject`），不是 `CommercialCarApp/` 子目录。
+> 本文档对应**仓库根目录**的实际工程（`E:\gitHub\automotiveProject`），Gradle 的 `rootProject.name` 仍为 `CommercialCarApp`；`CommercialCarApp/` 子目录是无源码的迁移残留（仅构建/IDE 缓存），不是源码工程。
 >
 > **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号、Binder 服务、数字钥匙、T-BOX、OTA、ADAS、DMS 均为**进程内仿真**，不连接真车、不连接云端，也不代表量产合规实现。
 
@@ -49,14 +49,15 @@
 
 ```text
 automotiveProject/
-├── app/                              # 应用入口：MainActivity + DockBar + 10 Tab + 语音 Overlay
+├── app/                              # 应用入口：MainActivity + 顶部 Tab 栏 + 10 Tab + 语音 Overlay
+│   └── src/main/res/                 # 启动图标（mipmap 各密度 ic_launcher/ic_launcher_round PNG）
 ├── core/
 │   ├── aidl/                         # IVehicleCoreManager / IVehicleEventListener
 │   ├── audio/                        # PTT 音频焦点与 Ducking 仿真
 │   ├── common/                       # 日志、Dispatchers、Result
 │   ├── data/                         # VehicleRepository 接口与实现（统一门面）
 │   ├── designsystem/                 # CarTheme、CarButton、CarCard、仪表盘组件
-│   ├── model/                        # 车辆信号、档位、电源、扩展域数据模型
+│   ├── model/                        # 车辆信号、档位、电源、座舱与扩展域数据模型
 │   ├── power/                        # 电源状态机（STR / Garage / 关机预备）
 │   ├── uxrestrictions/               # 行车防分心策略（演示阈值）
 │   ├── vehicle/                      # CarCoreDaemon：AIDL Stub 仿真服务端
@@ -106,7 +107,7 @@ automotiveProject/
 | `:core:model` | `CarSignal<T>` 及所有业务数据类 | 完整 |
 | `:core:designsystem` | 车规大触控组件与深色主题 | 可用 |
 | `:core:common` | 日志、调度器、Result | 可用 |
-| `:feature:*` | 各业务页面 | Dashboard/Connected/导航/电话/能量/健康可交互，其余以展示为主 |
+| `:feature:*` | 各业务页面 | Dashboard/Connected/导航/电话/能量/健康/空调/影音/设置可交互；仪表以展示为主；语音为 PTT 浮层 |
 
 ---
 
@@ -118,14 +119,18 @@ automotiveProject/
 app
  ├── feature:dashboard / cluster / navigation / climate / media / phone
  │   / connected / energy / health / settings / voice
- │     └── core:data
- │           ├── core:vehicle-service ──► core:vehicle ──► core:aidl
- │           ├── core:uxrestrictions / power / audio
- │           ├── core:digitalkey / telematics / adas / account
- │           ├── core:navigation / phone / energy / health
- │           └── core:common / model
+ │     ├── core:data
+ │     │     ├── core:vehicle-service ──► core:vehicle ──► core:aidl
+ │     │     ├── core:uxrestrictions / power / audio
+ │     │     ├── core:digitalkey / telematics / adas / account
+ │     │     ├── core:navigation / phone / energy / health
+ │     │     └── core:common / model
+ │     └── core:designsystem / common / model
+ ├── core:common / model
  └── core:designsystem ──► core:model
 ```
+
+补充：`:app` 也直接声明了 `:core:data` 依赖（与各 feature 相同，上图未重复展开）。
 
 已知依赖问题（保留现状，未在本轮重构）：`:core:vehicle-service` 为了直接拿 `CarCoreDaemon` 而依赖 `:core:vehicle`，客户端模块编译期依赖服务端实现，真实远程服务场景应只依赖 `:core:aidl`。
 
@@ -151,9 +156,9 @@ MainActivity
 Dashboard Injector
   └── VehicleRepository.injectSpeed / injectGear / injectPower
         └── VehicleServiceConnectionManager
-              └── CarCoreDaemon.injectMockXxx()
+              └── CarCoreDaemon.injectMockSpeed / injectMockGear / injectMockPower
                     ├── 更新内部 StateFlow
-                    ├── checkSafetyPolicy()
+                    ├── checkSafetyPolicy()          // 仅速度/档位注入触发
                     └── dispatch(IVehicleEventListener)
                           └── VehiclePropertyAdapter 更新 StateFlow
                                 └── VehicleRepository 暴露
@@ -174,7 +179,7 @@ ConnectedScreen
   │     └── AdasManager
   └── repository.userProfile / verifyDriverFace / cycleSeatPosition / adjustPreferredTemp / applyUserProfile
         └── AccountManager
-              └── applyUserProfile() 会把偏好温度写入 climateState（跨域联动示例）
+              └── applyUserProfile()（人脸验证通过后）会把偏好温度写入 climateState（跨域联动示例）
 ```
 
 ### 4.5 导航/电话/能量/健康链路
@@ -205,11 +210,11 @@ HealthScreen
 ### 4.6 PTT 链路
 
 ```text
-Dashboard "方向盘 PTT" 或语音浮层
+Dashboard "方向盘 PTT"
   └── repository.triggerPtt()
         ├── CarAudioManagerDelegate.triggerPttEvent()   // 本地音频状态：isPttActive=true
         └── CarCoreDaemon.triggerPttVoice()             // 仅更新 event Flow，当前没有消费者
-VoiceAssistantOverlay "完成对话"
+VoiceAssistantOverlay（监听 isPttActive 状态，本身不触发 PTT）"完成对话"
   └── repository.releasePtt()
         └── CarAudioManagerDelegate.releasePttEvent()   // isPttActive=false，浮层关闭
 ```
@@ -224,12 +229,12 @@ VoiceAssistantOverlay "完成对话"
 | 液晶仪表 | 大字号车速、档位；**动态 TBT 导航卡片**（与导航页共享路线状态）；ADAS 文案 |
 | **导航** | 仿真地图与路线；公司/家/充电站三个目的地；逐段“下一段”推进；剩余里程、ETA、限速、车道提示；结束后仪表同步恢复 |
 | 空调 HVAC | 主/副驾温度 ±0.5°C、风量 1–7 挡（本地状态） |
-| 多媒体影音 | 播放/暂停；行车状态自动切换为“视频防分心保护” |
+| 多媒体影音 | 播放/暂停（“下一首”为占位按钮）；行车状态自动切换为“视频防分心保护” |
 | **电话** | 蓝牙连接/断开；联系人拨号（1.2 s 自动接通）；模拟来电接听；通话计时；静音；挂断 |
 | **智能互联** | 数字钥匙靠近/远离/切换技术/门锁；T-BOX 远程命令、哨兵、OTA 进度；ADAS NOA/车道/巡航；DMS 人脸、座椅、偏好温度、应用 Profile |
 | **能量** | SOC 环形仪表；续航/温度/能耗；充电限值 ±5%；开始/停止充电（SOC 实时上升）；预约充电；电池预热 |
 | **健康** | 四轮胎压（右后偏低告警）；12V/里程/保养里程；制动/ESP/SRS/ADAS 自检；DTC 扫描（P0456、B1A00）与清除 |
-| 车辆设置 | 驾驶模式切换；ADAS 能力静态展示 |
+| 车辆设置 | 驾驶模式切换；ADAS 能力静态文案展示（仅 UI 文案，非真实能力） |
 
 **建议演示顺序**
 
@@ -274,7 +279,7 @@ oneway interface IVehicleEventListener {
 
 ### 6.2 VehicleRepository（统一门面）
 
-状态流：
+状态与数据：
 
 ```kotlin
 val isConnected: StateFlow<Boolean>
@@ -326,7 +331,7 @@ fun advanceNavigation()
 fun stopNavigation()
 fun togglePhoneBluetooth()
 fun dialContact(contact: Contact)
-fun simulateIncomingCall()
+fun simulateIncomingCall(contact: Contact)
 fun answerCall()
 fun hangUpCall()
 fun toggleCallMute()
@@ -342,7 +347,7 @@ fun clearDtcs()
 
 **DigitalKeyManager**
 
-- 区域顺序：`FAR(12m) → APPROACHING(8m) → WELCOME(4m) → UNLOCK(1.2m) → CABIN_INSIDE(0.5m)`
+- 模拟距离序列：`FAR(12m) → APPROACHING(8m) → WELCOME(4m) → UNLOCK(1.2m) → CABIN_INSIDE(0.5m)`（区域显示文案见 `ProximityZone`）。
 - 进入 `UNLOCK` 自动解锁，离开到 `APPROACHING/FAR` 自动落锁。
 - 只有 `CABIN_INSIDE` 且 SE 鉴权通过才允许启动。
 - `cycleTech()` 在 `UWB → BLE → NFC` 之间切换。
@@ -355,6 +360,7 @@ fun clearDtcs()
 **AdasManager**
 
 - `toggleNoa()`、`toggleLaneKeep()`、`adjustCruiseSpeed(delta)`。
+- 巡航速度限制在 30–130 km/h。
 - 感知目标来自 `AdasPerceptionState.targets` 静态数据。
 
 **AccountManager**
@@ -362,19 +368,19 @@ fun clearDtcs()
 - 初始 `isFaceIdVerified=false`，`verifyFace()` 置为已验证。
 - `cycleSeatPosition()` 在 1–4 之间循环。
 - `adjustPreferredTemp(delta)` 限制在 16–30°C。
-- `VehicleRepositoryImpl.applyUserProfile()` 会把偏好温度同步到主驾空调温度。
+- `VehicleRepositoryImpl.applyUserProfile()` 在人脸验证通过后会把偏好温度同步到主驾空调温度。
 
 **NavigationManager**
 
 - 3 个目的地预设（公司 18.6 km / 家 12.4 km / 望京充电站 6.8 km）。
-- `startRoute()` 初始化路线；`advance()` 推进 4 段指令，并同步剩余里程、ETA、限速、车道提示与进度；最后一段置为 `ARRIVED`。
+- `startRoute()` 初始化路线，并按目的地设定限速（望京充电站 40 km/h，其余 80 km/h）；`advance()` 推进 4 段指令，更新剩余里程、ETA、车道提示与进度，第 4 段后置为 `ARRIVED`。
 - 路线状态在导航页与仪表页之间共享。
 
 **PhoneManager**
 
 - `callJob` 保证同一时间只有一路通话。
 - `dial()` 进入 `DIALING`，1.2 s 后自动 `ACTIVE` 并每秒计时。
-- `simulateIncomingCall()` 进入 `RINGING`，`answerCall()` 接听；断开蓝牙会结束通话。
+- `simulateIncomingCall(contact)` 进入 `RINGING`，`answerCall()` 接听；断开蓝牙会结束通话。
 - 通话中可静音；挂断后状态归零。
 
 **EnergyManager**
@@ -393,6 +399,7 @@ fun clearDtcs()
 - `VehicleGear`：P=1 / R=2 / N=4 / D=8。
 - `PowerState`：RUNNING / STR_SLEEP / GARAGE_MODE / SHUTDOWN_PREPARE。
 - `UxRestrictionState`：`isRestricted`、`noVideo`、`noKeyboard`、`maxListLength`。
+- 座舱基础域：`AudioZoneState`（PTT/Ducking）、`ClimateState`（双区温度/风量）、`DriveMode`（ECO/COMFORT/SPORT/CUSTOM）。
 - 扩展域：`DigitalKeyState`、`TelematicsState`、`OtaState`、`AdasPerceptionState`、`PerceptionTarget`、`UserProfile`。
 - 座舱核心域：`NavigationState` / `NavigationDestination` / `RouteStatus`、`PhoneState` / `Contact` / `CallStatus`、`EnergyState`、`VehicleHealthState` / `TirePressure` / `SystemHealth` / `DtcCode` / `HealthSeverity`。
 
@@ -450,7 +457,7 @@ fun clearDtcs()
 | 单元/集成/UI/HIL 测试 | 无 |
 | CI/CD、签名、发布、灰度 | 无 |
 | 性能/内存/启动/稳定性基线 | 无 |
-| 日志、埋点、远程诊断 | 无 |
+| 日志、埋点、远程诊断 | 仅 Logcat 本地日志（CarLogger）；无埋点、远程诊断 |
 | ISO 26262 / ISO 21434 / GB 44495 / GB 44496 等流程 | 无 |
 
 > 说明：行车防分心规则在本项目中是**演示阈值**，参考 NHTSA Driver Distraction Guidelines；GB 44495 是整车信息安全要求，不应作为驾驶员分心判定依据。旧版 README 与代码中的相关引用已修正。
@@ -469,7 +476,7 @@ fun clearDtcs()
 | 音频系统 | PTT 抢焦点 + 音乐 Ducking | 4 | 多音区 AudioPolicy；焦点栈/路由/提示音；主动降噪/回声消除；独立音区播放与耳机输出 |
 | 电源与热管理 | 电源状态机骨架 | 4 | 量产电源状态机；STR/休眠唤醒策略；电池/座舱热管理；12V 亏电保护 |
 | OTA 与安全 | 本地 OTA 进度动画 | 6 | SOTA/FOTA A/B 与回滚；差分升级/灰度/云管；安全启动/SELinux/Keystore；SecOC/HSM/PKI；签名与完整性校验；失败恢复/看门狗 |
-| 诊断与日志 | 无 | 4 | UDS/DoIP 诊断栈；DTC 冻结帧/快照；日志抓取/远程诊断；故障预测与健康管理 |
+| 诊断与日志 | 仅 Logcat 本地日志；健康页 DTC 仿真 | 4 | UDS/DoIP 诊断栈；DTC 冻结帧/快照；日志抓取/远程诊断；故障预测与健康管理 |
 
 #### 7.5.2 座舱业务层（94 项）
 
@@ -498,12 +505,12 @@ fun clearDtcs()
 | :--- | :--- |
 | 单元测试 / 集成与 UI 测试 / HIL 台架 | 均无（3 项） |
 | CI/CD / 签名发布与灰度 / 性能与启动基线 / 稳定性长稳 | 均无（4 项） |
-| 日志埋点与远程可观测 / 多车型配置与国际化 | 无（2 项） |
+| 日志埋点与远程可观测 / 多车型配置与国际化 | 仅 Logcat 本地日志；无埋点/远程可观测，也无多车型配置/国际化（2 项） |
 | ISO 26262 功能安全 / ISO 21434 与 GB 44495/44496 信息安全 / 隐私合规 | 无（3 项） |
 
 #### 7.5.4 结论
 
-- **能演示的**：10 个 Tab 的交互闭环、跨域状态联动（导航↔仪表、DMS↔空调）、AIDL 数据链路形态。
+- **能演示的**：10 个 Tab 的交互/展示闭环、跨域状态联动（导航↔仪表、DMS↔空调）、AIDL 数据链路形态。
 - **不能交付的**：任何真实车辆/云端/蓝牙/地图/BMS/诊断链路，以及全部量产工程与合规体系。
 - 若以“可量产交付”为 100%，本项目当前更接近**功能原型 + 架构样板**，而不是按完成度折算的百分比；缺口应按上表逐项立项补齐。
 
@@ -518,10 +525,11 @@ fun clearDtcs()
 5. **Feature 直接依赖实现**：多数页面默认注入 `VehicleRepositoryImpl` 单例，没有 DI；测试与替换成本高。
 6. **仪表不是独立屏**：Cluster 是同一 Activity 的一个 Tab，不是多显示设备。
 7. **无测试**：仓库没有 `src/test` 或 `src/androidTest`。
-8. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码），不建议打开。
+8. **仓库卫生**：历史构建产物已从 Git 索引移除，并已在 `.gitignore` 全局忽略 `build/`；`CommercialCarApp/` 仍是未跟踪的迁移残留（无源码，仅构建/IDE 缓存），不建议打开。
 9. **四个新域是仿真**：导航没有地图引擎/定位，电话没有真实 HFP/PBAP，能量没有 BMS/充电桩协议，健康没有 UDS/DoIP；页面说明中也标注了“仿真模式”。
-10. **Tab 栏需要横向滚动**：10 个 Tab 在 1080p 横屏下超出宽度，能量/健康/设置位于右侧，需要滑动顶部 Tab 栏。
+10. **Tab 栏支持横向滚动**：顶部 Tab 栏已启用 `horizontalScroll`；当前模拟器宽度可完整显示 10 个 Tab，但在窄屏或更大字体/显示密度下可能超出宽度，此时可横向滑动访问右侧 Tab。
 11. **跨 Tab 联动靠内存状态**：导航路线、通话、充电、故障码均只存在于进程内，App 重启即丢失。
+12. **健康演示数据不一致**：胎压卡显示右后 2.1 bar 偏低，而扫描出的 DTC `B1A00` 文案写“右前轮胎压偏低”；两处均为静态演示数据，未与真实传感器绑定。
 
 ---
 
@@ -551,7 +559,11 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ### 运行
 
-- 安装到 Android 模拟器或真机即可，无需连接车辆。
+- 安装到 Android 模拟器或真机即可，无需连接车辆。应用包名为 `com.oem.car.app`，桌面显示名为 `AAOS Middleware`。
+- 本项目验证所用的 AAOS 模拟器镜像（android-automotive x86_64）驾驶用户为 User 10；命令行安装需显式指定用户，否则默认用户下可能看不到应用：
+  ```bash
+  adb install -r --user 10 app/build/outputs/apk/debug/app-debug.apk
+  ```
 - 所有能力均为本地仿真；没有网络、蓝牙、UWB、摄像头依赖。
 
 ---
