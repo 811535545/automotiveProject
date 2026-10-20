@@ -20,7 +20,11 @@
             <option value="$PROJECT_DIR$/core/data" />
             <option value="$PROJECT_DIR$/core/designsystem" />
             <option value="$PROJECT_DIR$/core/digitalkey" />
+            <option value="$PROJECT_DIR$/core/energy" />
+            <option value="$PROJECT_DIR$/core/health" />
             <option value="$PROJECT_DIR$/core/model" />
+            <option value="$PROJECT_DIR$/core/navigation" />
+            <option value="$PROJECT_DIR$/core/phone" />
             <option value="$PROJECT_DIR$/core/power" />
             <option value="$PROJECT_DIR$/core/telematics" />
             <option value="$PROJECT_DIR$/core/uxrestrictions" />
@@ -31,7 +35,11 @@
             <option value="$PROJECT_DIR$/feature/cluster" />
             <option value="$PROJECT_DIR$/feature/connected" />
             <option value="$PROJECT_DIR$/feature/dashboard" />
+            <option value="$PROJECT_DIR$/feature/energy" />
+            <option value="$PROJECT_DIR$/feature/health" />
             <option value="$PROJECT_DIR$/feature/media" />
+            <option value="$PROJECT_DIR$/feature/navigation" />
+            <option value="$PROJECT_DIR$/feature/phone" />
             <option value="$PROJECT_DIR$/feature/settings" />
             <option value="$PROJECT_DIR$/feature/voice" />
           </set>
