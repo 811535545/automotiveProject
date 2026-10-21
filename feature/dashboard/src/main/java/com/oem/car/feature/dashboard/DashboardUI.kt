@@ -69,7 +69,7 @@ fun DashboardScreen(
                                 gearDisplay = gearSignal.value.display
                             )
                             Column {
-                                Text("Service 挂载: ${if (isConnected) "🟢 已连接 (DeathRecipient 监控中)" else "🔴 未连接"}", fontSize = 13.sp)
+                                Text("Service 挂载: ${if (isConnected) "🟢 已连接 (车辆属性源)" else "🔴 未连接"}", fontSize = 13.sp)
                                 Text("电源状态: ${powerSignal.value.display}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
                                 if (audioState.isPttActive) {
                                     Text("🎙️ PTT 语音触发: 已抢占音频焦点 (Duck Music)", color = Color.Magenta, fontSize = 13.sp)

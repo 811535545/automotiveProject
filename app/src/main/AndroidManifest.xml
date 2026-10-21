@@ -1,11 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      AAOS 原生通道读取 PERF_VEHICLE_SPEED / GEAR_SELECTION 所需权限。
+      多数 AAOS 镜像里它们是 signature|privileged：普通 APK 声明了也拿不到，
+      provider 会捕获 SecurityException 并整体回退到 Mock Binder。
+    -->
+    <uses-permission android:name="android.car.permission.CAR_SPEED" />
+    <uses-permission android:name="android.car.permission.CAR_POWERTRAIN" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="AAOS Middleware"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+
+        <!-- 普通设备没有该 shared library；required=false 保证仍可安装并走 Mock 通道 -->
+        <uses-library
+            android:name="android.car"
+            android:required="false" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

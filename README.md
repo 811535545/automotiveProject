@@ -2,7 +2,7 @@
 
 > 本文档对应**仓库根目录**的实际工程（`E:\gitHub\automotiveProject`），Gradle 的 `rootProject.name` 仍为 `CommercialCarApp`；`CommercialCarApp/` 子目录是无源码的迁移残留（仅构建/IDE 缓存），不是源码工程。
 >
-> **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号域已拆成独立 `:vehicle` 进程，通过 AIDL/Binder 跨进程通信，并实测服务进程被杀后 3 秒自动重连；补齐车规级 VHAL 双模桥接、CAN/DBC 协议解包、多音区音频仲裁、多屏分发、3D 车身数字孪生及 AppFunctions AI 控车等 6 大核心扩展体系。
+> **定位**：可运行的座舱 HMI + 分层架构原型。车辆信号域默认由独立 `:vehicle` 进程通过 AIDL/Binder 提供，已实测服务进程被杀后 3 秒自动重连；在 AAOS 镜像上会尝试通过反射读取/订阅原生 `CarPropertyManager` 的车速与档位（只读，权限不足自动回退 Mock）。另有 CAN/DBC 编解码、多音区音频仲裁、多屏分发、3D 车身数字孪生与 AppFunctions 控车演示。
 
 ---
 
@@ -16,7 +16,7 @@
 - 用 AIDL + 独立 `:vehicle` 进程 + `bindService` + `RemoteCallbackList` + `DeathRecipient` 实现车辆服务的跨进程链路，并支持服务进程崩溃后的自动重连与状态快照回推。
 - 客户端模块只依赖 AIDL 契约，服务端实现放在 `:core:vehicle`，由 `VehicleCoreService` 在 `:vehicle` 进程中托管。
 - **【最新扩充】6 大车规级高级特性与架构支撑**：
-  1. **原生 AAOS `android.car` & Mock VHAL 双模桥接层 (`VehiclePropertyProvider`)**：符合 `VehiclePropertyIds` 官方属性标准，支持普通模拟器与 AAOS 官方车机镜像无缝切换。
+  1. **可选 AAOS `android.car` & Mock VHAL 双通道 (`VehiclePropertyProvider`)**：默认 Mock Binder；在带 `android.car` 的 AAOS 镜像上尝试读取/订阅 `PERF_VEHICLE_SPEED` 与 `GEAR_SELECTION`，只读桥接，权限不足或无 CarService 时整体回退 Mock。
   2. **ISO 11898-1 CAN/DBC 信号协议编解码器 (`CanMessageCodec`)**：模拟网关与 VHAL 底层交互，带 Rolling Counter 循环计数器与 ISO SAE J1850 **CRC8 校验码计算与验证**。
   3. **符合 AAOS 标准的 3 音区音频焦点仲裁 (`MultiZoneAudioManager`)**：支持主驾 (Driver Zone 0)、副驾 (Passenger Zone 1)、后排 (Rear Zone 2) 物理音区隔离，导航自动 Ducking 降音与 PTT 全车抢占。
   4. **座舱多屏分发与仪表屏 Display 联动 (`CockpitDisplayManager`)**：模拟 `DisplayAreaPolicy` 跨屏分发，支持将导航 Turn-By-Turn (TBT) 指引卡片实时投射至仪表屏。
@@ -28,6 +28,7 @@
 ### 1.2 这个项目明确没有做
 
 - 车辆服务虽有独立 `:vehicle` 进程，但仍与 App 在**同一 APK、同一 UID** 内，`exported=false`，没有权限校验/AIDL 版本管理。
+- AAOS 原生通道只读桥接车速与档位，需要 `CAR_SPEED` / `CAR_POWERTRAIN` 系统权限；本仓库只在普通 Android 设备验证了 Mock 回退，AAOS 原生路径尚未附实机/镜像验证日志。
 - 没有 CarSystemUI、Launcher、真实多显示屏物理硬隔离。
 - 没有真实数字钥匙协议（CCC 3.0 / UWB / BLE / NFC / SE）、真实 T-BOX 云通道、真实 OTA、真实 ADAS 感知与 3D SR 渲染。
 - 没有真实地图引擎、蓝牙 HFP/PBAP 链路、BMS/充电桩协议、UDS/DoIP 诊断链路。
@@ -46,7 +47,7 @@
 | JDK | 17 |
 | Android | compileSdk 34 / minSdk 28 / targetSdk 34 |
 | 架构 | 多模块 + Repository + StateFlow + 单向数据流 + DI 依赖注入容器 (`VehicleServiceContainer`) |
-| VHAL 桥接 | 抽象 `VehiclePropertyProvider`（Mock Binder 进程 ↔ Native AAOS `android.car` 动态感知） |
+| VHAL 桥接 | 抽象 `VehiclePropertyProvider`（Mock Binder 进程 ↔ 可选 AAOS `CarPropertyManager` 车速/档位只读桥接） |
 | 总线协议 | ISO 11898-1 CAN / DBC 信号编解码（CAN ID 0x120，CRC8 校验 + Rolling Counter） |
 | 音频体系 | 3 音区 (Driver/Passenger/Rear) 音频焦点仲裁与物理音区 Ducking 隔离引擎 |
 | IPC | AIDL + `bindService` + `RemoteCallbackList`（仅车辆域，主进程 ↔ `:vehicle`） |
@@ -72,7 +73,7 @@ automotiveProject/
 │   ├── power/                        # 电源状态机（STR / Garage / 关机预备）
 │   ├── uxrestrictions/               # 行车防分心策略（演示阈值）
 │   ├── vehicle/                      # CarCoreDaemon（AIDL Stub + CAN 报文打包）+ VehicleCoreService（:vehicle 进程）
-│   ├── vehicle-service/              # VehiclePropertyProvider (AAOS/Mock 双模抽象桥接层)
+│   ├── vehicle-service/              # VehiclePropertyProvider + AaosCarPropertyBridge (Mock/AAOS 双通道)
 │   ├── digitalkey/                   # 数字钥匙仿真（区域/技术/门锁/启动授权）
 │   ├── telematics/                   # T-BOX/车云/OTA 仿真
 │   ├── adas/                         # ADAS/感知目标仿真
@@ -101,9 +102,9 @@ automotiveProject/
 
 | 模块 | 新加核心代码类 / 文件 | 功能与职责说明 |
 | :--- | :--- | :--- |
-| `:core:model` | `VehiclePropertyIds.kt` | 定义 Android Automotive OS 官方属性标准 ID（车速 `0x11600207`、档位 `0x11400400`、电池 `0x11600209` 等）。 |
+| `:core:model` | `VehiclePropertyIds.kt` / `AaosSignalMapper.kt` | 定义 AAOS 官方属性 ID（车速 `0x11600207`、档位 `0x11400400`、电池 `0x11600309` 等），并负责 m/s→km/h、AAOS 档位码→项目档位码、CarPropertyValue 状态映射。 |
 | `:core:model` | `CanFrame.kt` & `CanMessageCodec` | ISO 11898-1 CAN 总线数据帧模型，包含 CAN ID `0x120` DBC 信号编解码器，计算并验证 Rolling Counter 和 ISO SAE J1850 CRC8 校验码。 |
-| `:core:vehicle-service` | `VehiclePropertyProvider.kt` | VHAL 桥接抽象接口与工厂，提供 `MockBinderPropertyProvider`（双进程 Binder）与 `AaosCarPropertyProvider`（通过反射动态感知 AAOS `android.car.CarPropertyManager`）双通道支持。 |
+| `:core:vehicle-service` | `VehiclePropertyProvider.kt` / `AaosCarPropertyBridge.kt` | 提供 `MockBinderPropertyProvider`（双进程 Binder）与 `AaosCarPropertyProvider`（反射连接 `CarPropertyManager`，读取并订阅车速/档位；失败整体回退 Mock）。 |
 | `:core:vehicle` | `CarCoreDaemon.kt` (更新) | 在接收注入模拟车速/档位时，自动调用 `CanMessageCodec` 生成并打印 8 字节二进制 CAN Hex Dump 报文。 |
 | `:core:audio` | `MultiZoneAudioManager.kt` | 多音区音频焦点仲裁引擎，管理 Driver Zone 0、Passenger Zone 1、Rear Zone 2 的媒体、导航和 PTT 语音焦点，实现主驾导航 Ducking 降音与副驾隔离。 |
 | `:core:navigation` | `CockpitDisplayManager.kt` | 多屏分发管理器（中控大屏、仪表屏、副驾屏），处理导航 Turn-by-Turn 指引卡片跨屏投射。 |
@@ -132,12 +133,12 @@ app
  ├── core:vehicle ──► core:aidl / core:model (CAN 报文打包)
 ```
 
-### 4.2 CAN 报文打包与 VHAL 双模接收链路
+### 4.2 CAN 报文打包与车辆属性接收链路（Mock / AAOS）
 
 ```text
-Dashboard Injector（主进程）
+Dashboard Injector（主进程，仅 Mock 通道生效）
   └── VehicleRepository.injectSpeed / injectGear / injectPower
-        └── VehiclePropertyProvider (MockBinder / Native AAOS CarPropertyManager)
+        └── VehiclePropertyProvider (MockBinder)
               └── IVehicleCoreManager.Proxy.transact(...) ── Binder IPC ──►
                     CarCoreDaemon（:vehicle 进程）
                       ├── CanMessageCodec.encodeVehicleSignal() 打包 8 字节 CAN 报文
@@ -145,7 +146,15 @@ Dashboard Injector（主进程）
                       ├── 打印 Log.d(TAG, "CAN=CAN[0x120] DLC=8 Data=...") Hex Dump
                       ├── checkSafetyPolicy()
                       └── dispatch(RemoteCallbackList) 异步通知客户端
+
+AAOS 镜像（可选，只读）
+  CarPropertyManager.registerCallback(PERF_VEHICLE_SPEED / GEAR_SELECTION)
+    └── AaosCarPropertyBridge 解包 CarPropertyValue
+          └── AaosSignalMapper：m/s→km/h、AAOS 档位码→项目档位码
+                └── VehiclePropertyAdapter → StateFlow → Compose
 ```
+
+> 原生 AAOS 通道是只读的，Dashboard 的注入按钮只对 Mock 通道生效；没有 `CAR_SPEED` / `CAR_POWERTRAIN` 权限时会整体回退 Mock，不会出现两个数据源混用。
 
 ### 4.3 多音区音频焦点仲裁链路
 
@@ -171,7 +180,18 @@ Dashboard Injector（主进程）
 
 ## 5. 核心接口与组件代码示范
 
-### 5.1 VHAL 双模桥接抽象 (`VehiclePropertyProvider`)
+### 5.1 VehiclePropertyProvider 双通道抽象
+
+工厂固定返回 `AaosCarPropertyProvider`，由它在运行时决定走哪条通道：
+
+- 设备存在 `android.car.Car`，且 `CarPropertyManager` 能读取并订阅车速/档位 → 原生 AAOS 通道（只读）；
+- 类不存在、CarService 连不上、属性不可用或权限不足 → Mock Binder 通道（`:vehicle` 进程，可注入）。
+
+原生通道的反射细节封装在 `AaosCarPropertyBridge`，普通设备不会加载这部分代码。完整调用链是：
+
+```text
+CarPropertyManager → CarPropertyService → PropertyHalService → VehicleHal → IVehicle → VHAL
+```
 
 ```kotlin
 interface VehiclePropertyProvider {
@@ -185,7 +205,7 @@ interface VehiclePropertyProvider {
     fun getProviderName(): String
 }
 
-// 工厂类自动检测 AAOS android.car.Car 类支持，无缝降级到 Mock Binder 进程
+// 工厂返回双通道实现：原生连接失败时整体回退 Mock Binder，不会混用两个数据源
 object VehiclePropertyProviderFactory {
     fun create(context: Context): VehiclePropertyProvider {
         return AaosCarPropertyProvider(context)
@@ -241,7 +261,7 @@ export ANDROID_HOME=D:/SDK
 
 ### 6.2 运行自动化单元测试
 
-仓库包含针对防分心规则、CAN 报文 CRC8 编解码与多音区音频仲裁的完整的 JVM 单元测试：
+仓库包含防分心规则、CAN 报文 CRC8 编解码、多音区音频仲裁与 AAOS 信号映射的 JVM 单元测试：
 
 ```bash
 ./gradlew testDebugUnitTest
@@ -252,12 +272,13 @@ export ANDROID_HOME=D:/SDK
 - `com.oem.car.core.audio.MultiZoneAudioManagerTest`（主驾导航 Ducking 降音与全音区 PTT 压音校验通过）
 - `com.oem.car.core.model.DrivingSafetyPolicyTest`
 - `com.oem.car.core.uxrestrictions.CarUxRestrictionsEngineTest`
+- `com.oem.car.core.model.AaosSignalMapperTest`（m/s→km/h、AAOS/项目档位码映射、CarPropertyValue 状态映射）
 
 ---
 
 ## 7. 总结与后续路线
 
-本项目不仅是一个完整的座舱 HMI 界面演示，更具备了**车规级 VHAL 双模桥接、底层 CAN 报文编解码、多音区音频焦点仲裁、多屏分发投射以及 AI Agent 控车**的完整架构支撑，是进行 AAOS 架构学习、座舱原型搭建与技术演进的最佳实践样板。
+本项目是一个可运行的座舱 HMI 与架构演示：包含 Binder 跨进程车辆信号、Mock/AAOS 双通道属性桥接（原生侧只读车速/档位）、CAN 报文编解码、多音区音频仲裁、多屏分发与 AI 控车演示。它适合 AAOS 学习与面试展示，但原生 AAOS 通道仍需在带相应系统权限的 AAOS 镜像上验证，不能当作量产实现。
 如果你未来去面试 OEM（车厂）或 Tier-1 架构师，决定你薪资上限的正是以下这些**“车规级防坑经验”**：
 1. 极致的长稳与内存零泄漏（7×24 小时开机）
    •
