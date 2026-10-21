@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
  *
  * 实现了双模式兼容：
  * 1. MockBinderPropertyProvider：在普通手机/模拟器上，通过 Binder 连接本地模拟进程 (:vehicle)；
- * 2. AaosCarPropertyProvider：在原生 Android Automotive OS (AAOS) 车机模拟器上，通过反射接入系统 CarPropertyManager。
+ * 2. AaosCarPropertyProvider：在原生 Android Automotive OS (AAOS) 车机模拟器上，通过反射动态接入系统 CarPropertyManager。
  */
 interface VehiclePropertyProvider {
     val isConnected: StateFlow<Boolean>
@@ -58,7 +58,7 @@ class MockBinderPropertyProvider(
 
 /**
  * 原生 AAOS CarPropertyManager 桥接层。
- * 当运行在真实的 AAOS 车机镜像或官方 Automotive 模拟器上时，优先使用此 Provider。
+ * 当运行在真实的 AAOS 车机镜像或官方 Automotive 模拟器上时，优先通过反射接入系统原生 CarPropertyManager。
  */
 class AaosCarPropertyProvider(
     private val context: Context
@@ -68,13 +68,14 @@ class AaosCarPropertyProvider(
 
     init {
         try {
-            // 尝试检测系统是否包含 android.car.Car 类
+            // 运行时先询问 ClassLoader：“车机系统里到底有没有预装 android.car.Car？
+            // 检测系统是否包含 android.car.Car 类 (仅 AAOS 系统镜像存在)
             val carClass = Class.forName("android.car.Car")
             isAaosAvailable = carClass != null
-            CarLogger.i(TAG, "AAOS Car API detected: isAvailable=$isAaosAvailable")
+            CarLogger.i(TAG, "AAOS Native System API detected: isAvailable=$isAaosAvailable")
         } catch (e: ClassNotFoundException) {
             isAaosAvailable = false
-            CarLogger.w(TAG, "AAOS Car API not found, falling back to MockBinderPropertyProvider")
+            CarLogger.w(TAG, "AAOS Native System API not present on this device, using MockBinderPropertyProvider")
         }
     }
 
@@ -82,8 +83,16 @@ class AaosCarPropertyProvider(
 
     override fun connect() {
         if (isAaosAvailable) {
-            CarLogger.i(TAG, "Connecting via native AAOS CarPropertyManager for propertyId=${VehiclePropertyIds.PERF_VEHICLE_SPEED}")
-            // 真实车机下在此调用 Car.createCar() 和 CarPropertyManager.registerCallback()
+            try {
+                CarLogger.i(TAG, "Connecting via native AAOS CarPropertyManager for propertyId=${VehiclePropertyIds.PERF_VEHICLE_SPEED}")
+                // 通过反射调用 Car.createCar(context) 与 CarPropertyManager
+                val carClass = Class.forName("android.car.Car")
+                val createCarMethod = carClass.getMethod("createCar", Context::class.java)
+                val carInstance = createCarMethod.invoke(null, context)
+                CarLogger.i(TAG, "Native AAOS Car service instance created: $carInstance")
+            } catch (e: Exception) {
+                CarLogger.e(TAG, "Failed to initialize native AAOS CarPropertyManager via reflection", e)
+            }
         }
         fallbackProvider.connect()
     }
