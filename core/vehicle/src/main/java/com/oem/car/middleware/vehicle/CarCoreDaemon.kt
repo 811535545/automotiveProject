@@ -227,8 +227,17 @@ class CarCoreDaemon : IVehicleCoreManager.Stub() {
      * 注意：因为第 2 步在第 3 步之前，客户端可能先收到"防分心"回调，
      * 再收到"速度"回调。如果业务要求严格顺序，需要调整两个 dispatch 的先后。
      */
+    private var rollingCounter = 0
+
     override fun injectMockSpeed(speed: Float) {
-        Log.d(TAG, "injectMockSpeed speed=$speed callerPid=${Binder.getCallingPid()}")
+        rollingCounter = (rollingCounter + 1) % 16
+        val frame = com.oem.car.core.model.CanMessageCodec.encodeVehicleSignal(
+            speed = speed,
+            gear = _gear.value,
+            powerState = _powerState.value,
+            counter = rollingCounter
+        )
+        Log.d(TAG, "injectMockSpeed speed=$speed callerPid=${Binder.getCallingPid()} CAN=${frame.toHexDump()}")
         _speed.value = speed
         checkSafetyPolicy()
         dispatch { it.onSpeedChanged(speed) }

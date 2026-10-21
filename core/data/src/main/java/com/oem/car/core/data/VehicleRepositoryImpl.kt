@@ -26,22 +26,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 object VehicleRepositoryImpl : VehicleRepository {
     private val scope = CoroutineScope(Dispatchers.Default)
 
-    private var serviceManager: VehicleServiceConnectionManager? = null
+    private var propertyProvider: com.oem.car.core.vehicleservice.VehiclePropertyProvider? = null
 
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    private val uxEngine = CarUxRestrictionsEngine()
-    private val powerManager = CarPowerLifecycleManager()
-    private val audioDelegate = CarAudioManagerDelegate()
-    private val digitalKeyManager = DigitalKeyManager()
-    private val telematicsManager = TelematicsManager(scope)
-    private val adasManager = AdasManager()
-    private val accountManager = AccountManager()
-    private val navigationManager = NavigationManager()
-    private val phoneManager = PhoneManager(scope)
-    private val energyManager = EnergyManager(scope)
-    private val healthManager = VehicleHealthManager(scope)
+    private val uxEngine = VehicleServiceContainer.uxEngine
+    private val powerManager = VehicleServiceContainer.powerManager
+    private val audioDelegate = VehicleServiceContainer.audioDelegate
+    private val digitalKeyManager = VehicleServiceContainer.digitalKeyManager
+    private val telematicsManager = VehicleServiceContainer.telematicsManager
+    private val adasManager = VehicleServiceContainer.adasManager
+    private val accountManager = VehicleServiceContainer.accountManager
+    private val navigationManager = VehicleServiceContainer.navigationManager
+    private val phoneManager = VehicleServiceContainer.phoneManager
+    private val energyManager = VehicleServiceContainer.energyManager
+    private val healthManager = VehicleServiceContainer.healthManager
     private val initialized = AtomicBoolean(false)
 
     override val speedSignal: StateFlow<CarSignal<Float>> = VehiclePropertyAdapter.speedSignal
@@ -68,12 +68,12 @@ object VehicleRepositoryImpl : VehicleRepository {
     override fun initialize(context: Context) {
         if (!initialized.compareAndSet(false, true)) return
 
-        val manager = VehicleServiceConnectionManager(context.applicationContext, scope)
-        serviceManager = manager
+        val provider = VehicleServiceContainer.getPropertyProvider(context.applicationContext)
+        propertyProvider = provider
         scope.launch {
-            manager.isConnected.collect { _isConnected.value = it }
+            provider.isConnected.collect { _isConnected.value = it }
         }
-        manager.connect()
+        provider.connect()
 
         // Combine signals to drive safety rules and power states
         scope.launch {
@@ -94,20 +94,20 @@ object VehicleRepositoryImpl : VehicleRepository {
     }
 
     override fun injectSpeed(speed: Float) {
-        serviceManager?.injectSpeed(speed)
+        propertyProvider?.injectSpeed(speed)
     }
 
     override fun injectGear(gear: VehicleGear) {
-        serviceManager?.injectGear(gear)
+        propertyProvider?.injectGear(gear)
     }
 
     override fun injectPower(powerState: PowerState) {
-        serviceManager?.injectPower(powerState)
+        propertyProvider?.injectPower(powerState)
     }
 
     override fun triggerPtt() {
         audioDelegate.triggerPttEvent()
-        serviceManager?.triggerPtt()
+        propertyProvider?.triggerPtt()
     }
 
     override fun releasePtt() {

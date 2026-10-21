@@ -14,6 +14,9 @@ import com.oem.car.core.designsystem.*
 import com.oem.car.core.model.PowerState
 import com.oem.car.core.model.VehicleGear
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = viewModel()
@@ -32,11 +35,12 @@ fun DashboardScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp)
         ) {
-            // 左侧：座舱核心数据与总线注入模拟器
+            // 左侧：座舱核心数据与总线注入模拟器（加入垂直滚动支持）
             Column(
                 modifier = Modifier
                     .weight(1.2f)
                     .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
                     .padding(end = 12.dp)
             ) {
                 Row(
@@ -51,22 +55,35 @@ fun DashboardScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 CarCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        SpeedGaugeComponent(
-                            speed = speedSignal.value,
-                            gearDisplay = gearSignal.value.display
-                        )
-                        Column {
-                            Text("Service 挂载: ${if (isConnected) "🟢 已连接 (DeathRecipient 监控中)" else "🔴 未连接"}", fontSize = 13.sp)
-                            Text("电源状态: ${powerSignal.value.display}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-                            if (audioState.isPttActive) {
-                                Text("🎙️ PTT 语音触发: 已抢占音频焦点 (Duck Music)", color = Color.Magenta, fontSize = 13.sp)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceAround,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SpeedGaugeComponent(
+                                speed = speedSignal.value,
+                                gearDisplay = gearSignal.value.display
+                            )
+                            Column {
+                                Text("Service 挂载: ${if (isConnected) "🟢 已连接 (DeathRecipient 监控中)" else "🔴 未连接"}", fontSize = 13.sp)
+                                Text("电源状态: ${powerSignal.value.display}", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
+                                if (audioState.isPttActive) {
+                                    Text("🎙️ PTT 语音触发: 已抢占音频焦点 (Duck Music)", color = Color.Magenta, fontSize = 13.sp)
+                                }
                             }
                         }
+
+                        // 3D 数字孪生渲染器
+                        Vehicle3dVisualizer(
+                            speed = speedSignal.value,
+                            isDoorLocked = true,
+                            isDriving = gearSignal.value == VehicleGear.DRIVE && speedSignal.value > 0.5f,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
                 }
 

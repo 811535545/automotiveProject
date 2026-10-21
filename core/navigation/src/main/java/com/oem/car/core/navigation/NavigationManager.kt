@@ -26,13 +26,16 @@ class NavigationManager {
     )
 
     private var step = 0
+    val displayManager = CockpitDisplayManager()
 
     fun startRoute(destination: NavigationDestination) {
         step = 0
+        val firstInstruction = instructions[0]
+        displayManager.updateClusterTbtCard("导航至 ${destination.name}: $firstInstruction")
         _state.value = NavigationState(
             status = RouteStatus.NAVIGATING,
             destination = destination,
-            nextInstruction = instructions[0],
+            nextInstruction = firstInstruction,
             distanceToTurnMeters = 200,
             remainingKm = destination.distanceKm,
             etaMinutes = destination.etaMinutes,

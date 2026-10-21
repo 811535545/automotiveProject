@@ -44,7 +44,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class CockpitTab(val title: String) {
-    DASHBOARD("中控"), CLUSTER("仪表"), NAVIGATION("导航"), CLIMATE("空调"), MEDIA("影音"), PHONE("电话"), CONNECTED(
+    DASHBOARD("中控"), CLUSTER("仪表"), CAR_3D("3D车模"), NAVIGATION("导航"), CLIMATE("空调"), MEDIA("影音"), PHONE("电话"), CONNECTED(
         "互联"
     ),
     ENERGY("能量"), HEALTH("健康"), SETTINGS("设置")
@@ -69,17 +69,15 @@ fun MainCockpitNavigationHost() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
 
-                //Text("🚘 AAOS Cockpit", color = Color(0xFF00E5FF), fontSize = 16.sp)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp) // 控制图标与文字的间距
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-
                     Icon(
-                        painter = painterResource(id = R.mipmap.ic_car), // 你的 Vector Drawable 图标
+                        painter = painterResource(id = R.mipmap.ic_car),
                         contentDescription = "Car Icon",
-                        tint = Color(0xFF00E5FF), // 统一的青蓝色调
-                        modifier = Modifier.size(20.dp) // 控制图标大小
+                        tint = Color(0xFF00E5FF),
+                        modifier = Modifier.size(20.dp)
                     )
 
                     Text(
@@ -87,7 +85,6 @@ fun MainCockpitNavigationHost() {
                         color = Color(0xFF00E5FF),
                         fontSize = 16.sp
                     )
-
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
@@ -102,7 +99,6 @@ fun MainCockpitNavigationHost() {
                         )
                     )
                 }
-
             }
 
             //Main Screen View Area
@@ -114,6 +110,7 @@ fun MainCockpitNavigationHost() {
                 when (selectedTab) {
                     CockpitTab.DASHBOARD -> DashboardScreen()
                     CockpitTab.CLUSTER -> ClusterScreen()
+                    CockpitTab.CAR_3D -> com.oem.car.feature.dashboard.Vehicle3dScreen()
                     CockpitTab.NAVIGATION -> NavigationScreen()
                     CockpitTab.CLIMATE -> ClimateScreen()
                     CockpitTab.MEDIA -> MediaScreen()
