@@ -4,6 +4,10 @@
     <!-- 宣告车载系统硬件特性 -->
     <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
 
+    <!-- AAOS 车规级开机自启权限 -->
+    <uses-permission android:name="android.intent.action.BOOT_COMPLETED" />
+    <uses-permission android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+
     <!--
       AAOS 原生通道系统级权限宣告。
       注：在系统级 privileged app 或签名匹配的 AAOS 系统镜像上，可直接获得车辆控制权。
@@ -27,6 +31,18 @@
             android:name="android.car"
             android:required="false" />
 
+        <!-- 注册座舱中间件开机自启广播接收器 -->
+        <receiver
+            android:name="com.oem.car.core.vehicleservice.BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -34,6 +50,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
     </application>
