@@ -14,6 +14,7 @@ android {
     kotlinOptions { jvmTarget = "17" }
 }
 dependencies {
+    compileOnly(files("libs/android.car-stubs.jar"))
     implementation(project(":core:common"))
     implementation(project(":core:model"))
     implementation(project(":core:aidl"))
