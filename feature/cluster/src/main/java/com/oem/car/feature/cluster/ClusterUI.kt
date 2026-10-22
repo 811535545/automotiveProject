@@ -42,7 +42,7 @@ fun ClusterScreen(
                     horizontalArrangement = Arrangement.spacedBy(48.dp)
                 ) {
                 SpeedGaugeComponent(
-                    speed = speedSignal.value,
+                    speedSignal = speedSignal,
                     gearDisplay = gearSignal.value.display
                 )
 

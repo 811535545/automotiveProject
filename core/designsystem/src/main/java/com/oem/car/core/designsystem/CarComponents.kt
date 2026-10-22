@@ -68,17 +68,24 @@ fun SafetyBadge(isRestricted: Boolean, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun SpeedGaugeComponent(speed: Float, gearDisplay: String) {
+fun SpeedGaugeComponent(
+    speedSignal: com.oem.car.core.model.CarSignal<Float>,
+    gearDisplay: String
+) {
+    val isValid = speedSignal.status == com.oem.car.core.model.SignalStatus.VALID
+    val speedText = if (isValid) "${speedSignal.value.toInt()}" else "--"
+    val textColor = if (isValid) MaterialTheme.colorScheme.primary else Color(0xFFFF9100)
+
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
-            text = "${speed.toInt()}",
+            text = speedText,
             fontSize = 64.sp,
-            color = MaterialTheme.colorScheme.primary
+            color = textColor
         )
         Text(
-            text = "KM/H",
+            text = if (isValid) "KM/H" else "信号降级/离线",
             fontSize = 14.sp,
-            color = Color.Gray
+            color = if (isValid) Color.Gray else Color(0xFFFF9100)
         )
         Spacer(modifier = Modifier.height(4.dp))
         Surface(

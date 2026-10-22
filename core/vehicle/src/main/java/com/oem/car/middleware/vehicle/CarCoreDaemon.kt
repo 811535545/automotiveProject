@@ -293,9 +293,14 @@ class CarCoreDaemon : IVehicleCoreManager.Stub() {
      * 当前客户端从 UI 单线程顺序调用注入方法，不会并发；
      * 如果未来多客户端并发注入，可能出现两个线程交错读写，需要加锁或串行化。
      */
+    /**
+     * 车规防分心策略：带锁与迟滞滞后区（并发线程安全）。
+     *
+     * 线程安全：synchronized 确保 Binder 线程池多个并发注入请求不会产生竞态条件。
+     */
+    @Synchronized
     private fun checkSafetyPolicy() {
-        // 车规防分心：D 档或速度 > 0.5km/h 触发拦截；规则与客户端共用 DrivingSafetyPolicy
-        val restricted = DrivingSafetyPolicy.isDriving(_gear.value, _speed.value)
+        val restricted = DrivingSafetyPolicy.isDriving(_gear.value, _speed.value, _isRestricted.value)
         if (_isRestricted.value != restricted) {
             _isRestricted.value = restricted
             dispatch { it.onDistractionStateChanged(restricted) }
@@ -303,29 +308,24 @@ class CarCoreDaemon : IVehicleCoreManager.Stub() {
     }
 
     /**
-     * 向所有已注册客户端广播一次事件。
+     * 向所有已注册客户端广播一次事件（车规级健壮 try-finally 收尾）。
      *
-     * RemoteCallbackList 的固定用法：
-     * - beginBroadcast() 返回当前回调数量（相当于一份快照）；
-     * - getBroadcastItem(i) 取出每个客户端回调的 Binder 代理；
-     * - 必须与 finishBroadcast() 成对调用。
-     *
-     * 每个客户端单独 try/catch：一个客户端进程死亡或抛异常，不会影响其他客户端。
-     *
-     * 注意：当前 begin/finish 没有放在 try/finally 中；如果 action 抛出非 Exception
-     * 的 Error，finishBroadcast() 可能执行不到。所有回调都是 oneway，风险很低，
-     * 但更稳妥的写法是 try { ... } finally { callbacks.finishBroadcast() }。
+     * 使用 try { ... } finally { callbacks.finishBroadcast() } 确保即使抛出致命 Error，
+     * RemoteCallbackList 也能被安全解锁，绝不发生死锁或状态死锁。
      */
     private fun dispatch(action: (IVehicleEventListener) -> Unit) {
         val count = callbacks.beginBroadcast()
-        for (i in 0 until count) {
-            try {
-                action(callbacks.getBroadcastItem(i))
-            } catch (e: Exception) {
-                // 单个客户端失败不影响其余客户端。
+        try {
+            for (i in 0 until count) {
+                try {
+                    action(callbacks.getBroadcastItem(i))
+                } catch (e: Exception) {
+                    Log.w(TAG, "dispatch error to client $i: ${e.message}")
+                }
             }
+        } finally {
+            callbacks.finishBroadcast()
         }
-        callbacks.finishBroadcast()
     }
 
     companion object {

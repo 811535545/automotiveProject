@@ -1,14 +1,26 @@
 package com.oem.car.core.vehicleservice
 
+import com.oem.car.core.common.CarLogger
 import com.oem.car.core.model.CarSignal
 import com.oem.car.core.model.PowerState
 import com.oem.car.core.model.SignalStatus
 import com.oem.car.core.model.VehicleGear
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 
+/**
+ * 车规信号转换适配器（含信号超时降级看门狗 Signal Timeout Watchdog）。
+ */
 object VehiclePropertyAdapter {
+    private const val SIGNAL_TIMEOUT_MS = 5000L
+    private const val TAG = "VehiclePropertyAdapter"
+
     private val _speedSignal = MutableStateFlow(CarSignal(0f))
     val speedSignal: StateFlow<CarSignal<Float>> = _speedSignal.asStateFlow()
 
@@ -21,14 +33,20 @@ object VehiclePropertyAdapter {
     private val _distractionSignal = MutableStateFlow(CarSignal(false))
     val distractionSignal: StateFlow<CarSignal<Boolean>> = _distractionSignal.asStateFlow()
 
-    /**
-     * @param speedKmh 车速，单位 km/h。
-     * @param status Mock 路径按 0..300 的合理区间推断；AAOS 路径直接透传
-     *   CarPropertyValue.getStatus() 映射后的状态。
-     * @param timestampMs 事件时间（毫秒）。Mock 路径是墙钟时间，AAOS 路径由
-     *   elapsedRealtimeNanos 换算而来，只用于判断新旧，不参与业务计算。
-     * @param areaId AAOS 的区域 ID；车速是 GLOBAL 属性，通常为 0。
-     */
+    fun startSignalTimeoutWatchdog(scope: CoroutineScope = CoroutineScope(Dispatchers.Default)) {
+        scope.launch {
+            while (isActive) {
+                delay(2000L)
+                val now = SystemClockOrWall.currentTimeMillis()
+                val speedSig = _speedSignal.value
+                if (speedSig.isValid && (now - speedSig.timestamp > SIGNAL_TIMEOUT_MS)) {
+                    CarLogger.w(TAG, "Speed signal timeout (> ${SIGNAL_TIMEOUT_MS}ms); degrading to UNAVAILABLE")
+                    _speedSignal.value = speedSig.copy(status = SignalStatus.UNAVAILABLE)
+                }
+            }
+        }
+    }
+
     fun updateSpeed(
         speedKmh: Float,
         status: SignalStatus = if (speedKmh in 0f..300f) {
@@ -47,10 +65,6 @@ object VehiclePropertyAdapter {
         )
     }
 
-    /**
-     * @param gearCode 项目内部档位码（1=P, 2=R, 4=N, 8=D），不是 AAOS 的档位码。
-     *   AAOS 的 1=N/4=P 顺序不同，必须在桥接层先用 AaosSignalMapper 转换。
-     */
     fun updateGear(
         gearCode: Int,
         status: SignalStatus = SignalStatus.VALID,
@@ -71,5 +85,9 @@ object VehiclePropertyAdapter {
 
     fun updateDistractionState(isRestricted: Boolean) {
         _distractionSignal.value = CarSignal(isRestricted)
+    }
+
+    private object SystemClockOrWall {
+        fun currentTimeMillis(): Long = System.currentTimeMillis()
     }
 }

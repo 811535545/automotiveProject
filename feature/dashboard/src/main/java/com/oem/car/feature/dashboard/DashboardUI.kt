@@ -65,7 +65,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             SpeedGaugeComponent(
-                                speed = speedSignal.value,
+                                speedSignal = speedSignal,
                                 gearDisplay = gearSignal.value.display
                             )
                             Column {

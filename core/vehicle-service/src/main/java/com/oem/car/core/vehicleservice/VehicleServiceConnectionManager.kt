@@ -84,6 +84,7 @@ class VehicleServiceConnectionManager(
                 return
             }
             vehicleCoreManager = manager
+            reconnectAttempt = 0
             _isConnected.value = true
             val now = SystemClock.uptimeMillis()
             CarLogger.i(
@@ -200,11 +201,17 @@ class VehicleServiceConnectionManager(
         }
     }
 
+    private var reconnectAttempt = 0
+
     private fun scheduleReconnect() {
         if (reconnectJob?.isActive == true) return
-        CarLogger.w(TAG, "scheduleReconnect in ${RECONNECT_DELAY_MS}ms")
+        reconnectAttempt++
+        // 指数退避算法: 1s -> 2s -> 4s -> max 10s
+        val delayMs = (INITIAL_RECONNECT_DELAY_MS * (1 shl (reconnectAttempt - 1).coerceAtMost(3)))
+            .coerceAtMost(MAX_RECONNECT_DELAY_MS)
+        CarLogger.w(TAG, "scheduleReconnect attempt=$reconnectAttempt delay=${delayMs}ms")
         reconnectJob = externalScope.launch {
-            delay(RECONNECT_DELAY_MS)
+            delay(delayMs)
             connect()
         }
     }
@@ -225,6 +232,7 @@ class VehicleServiceConnectionManager(
         private const val TAG = "VehicleServiceConn"
         private const val AIDL_DESCRIPTOR = "com.oem.car.middleware.IVehicleCoreManager"
         private const val VEHICLE_SERVICE_CLASS = "com.oem.car.middleware.vehicle.VehicleCoreService"
-        private const val RECONNECT_DELAY_MS = 3000L
+        private const val INITIAL_RECONNECT_DELAY_MS = 1000L
+        private const val MAX_RECONNECT_DELAY_MS = 10000L
     }
 }
