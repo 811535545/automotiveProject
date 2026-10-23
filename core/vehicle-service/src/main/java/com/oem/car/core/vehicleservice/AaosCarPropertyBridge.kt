@@ -37,6 +37,7 @@ internal class AaosCarPropertyBridge(
     private val onSpeed: (CarSignal<Float>) -> Unit,
     private val onGear: (CarSignal<VehicleGear>) -> Unit
 ) {
+
     private var carClass: Class<*>? = null
     private var car: Any? = null
     private var managerClass: Class<*>? = null
@@ -44,23 +45,57 @@ internal class AaosCarPropertyBridge(
     private var callbackInterface: Class<*>? = null
     private var callback: Any? = null
 
+    companion object {
+        private const val TAG = "AaosCarPropertyBridge"
+        private const val CAR_CLASS = "android.car.Car"
+        private const val CALLBACK_CLASS =
+            "android.car.hardware.property.CarPropertyManager\$CarPropertyEventCallback"
+
+        /** Car.PROPERTY_SERVICE 的字符串值 */
+        private const val CAR_PROPERTY_SERVICE = "property"
+
+        /** 全局属性的 areaId 固定为 0 */
+        private const val GLOBAL_AREA_ID = 0
+
+        /** CarPropertyManager.SENSOR_RATE_UI */
+        private const val SPEED_RATE_HZ = 5.0f
+
+        /** CarPropertyManager.SENSOR_RATE_ONCHANGE */
+        private const val GEAR_RATE_HZ = 0.0f
+
+        /** CarPropertyValue.STATUS_ERROR */
+        private const val AAOS_STATUS_ERROR = 2
+        private const val NANOS_PER_MILLI = 1_000_000L
+
+        private val INT_PRIMITIVE: Class<*> = java.lang.Integer.TYPE
+
+        private val FLOAT_PRIMITIVE: Class<*> = java.lang.Float.TYPE
+
+    }
+
     /**
      * 连接 CarService，读取一次初始值，再订阅车速/档位。
      *
      * 两步都成功才返回 true；只要有一个属性订阅失败（最常见原因是
      * CAR_SPEED/CAR_POWERTRAIN 权限没授予），调用方就会整体回退到 Mock，
      * 避免出现“车速来自 AAOS、档位来自 Mock”的混合数据源。
+     *
      */
     fun connect(): Boolean {
+
         return try {
+
             val localCarClass = Class.forName(CAR_CLASS)
+
             // connect() 在后台线程执行；显式传入主 Looper 的 Handler，
             // 避免 Car 内部回调依赖当前线程的 Looper（后台线程默认没有 Looper）。
             val mainHandler = Handler(Looper.getMainLooper())
+
             val localCar = localCarClass
                 .getMethod("createCar", Context::class.java, Handler::class.java)
                 .invoke(null, context, mainHandler)
                 ?: return false
+
             val localManager = localCarClass
                 .getMethod("getCarManager", String::class.java)
                 .invoke(localCar, CAR_PROPERTY_SERVICE)
@@ -294,29 +329,5 @@ internal class AaosCarPropertyBridge(
         }
     }
 
-    companion object {
-        private const val TAG = "AaosCarPropertyBridge"
-        private const val CAR_CLASS = "android.car.Car"
-        private const val CALLBACK_CLASS =
-            "android.car.hardware.property.CarPropertyManager\$CarPropertyEventCallback"
 
-        /** Car.PROPERTY_SERVICE 的字符串值 */
-        private const val CAR_PROPERTY_SERVICE = "property"
-
-        /** 全局属性的 areaId 固定为 0 */
-        private const val GLOBAL_AREA_ID = 0
-
-        /** CarPropertyManager.SENSOR_RATE_UI */
-        private const val SPEED_RATE_HZ = 5.0f
-
-        /** CarPropertyManager.SENSOR_RATE_ONCHANGE */
-        private const val GEAR_RATE_HZ = 0.0f
-
-        /** CarPropertyValue.STATUS_ERROR */
-        private const val AAOS_STATUS_ERROR = 2
-        private const val NANOS_PER_MILLI = 1_000_000L
-
-        private val INT_PRIMITIVE: Class<*> = java.lang.Integer.TYPE
-        private val FLOAT_PRIMITIVE: Class<*> = java.lang.Float.TYPE
-    }
 }
