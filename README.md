@@ -35,6 +35,10 @@
 
 因此：**它适合做架构演示、AAOS 学习、面试项目；不能直接作为量产座舱交付。**
 
+> 📄 **同级目录重点架构复盘与面试文档**：
+> - 📄 [ARCHITECTURE_PORTFOLIO.md](ARCHITECTURE_PORTFOLIO.md)：**智能座舱 Android 架构师 / 高级工程师简历项目经历 (STAR 法则) 与技术面试深水区复盘**
+> - 📄 [MIDDLEWARE_DATA_FLOW.md](MIDDLEWARE_DATA_FLOW.md)：**车载中间件全景数据流向图与 8 层内部流水线透视 (从物理电信号到屏幕像素重绘)**
+
 ---
 
 ## 2. 技术栈
