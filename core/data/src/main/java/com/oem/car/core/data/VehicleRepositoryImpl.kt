@@ -27,14 +27,28 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * ============================================================================
+ * 车载核心统一数据门面实现类 (Vehicle Repository Implementation)
+ * ============================================================================
+ *
+ * 【核心职责】
+ * 1. 作为座舱应用的中央数据仓库 (Single Source of Truth)；
+ * 2. 聚合 10 多个领域子系统（空调、数字钥匙、T-BOX、ADAS、账号、导航、电话、能量、健康）；
+ * 3. 持有并管理 `VehiclePropertyProvider`（双通道 VHAL / Mock Binder 桥接）；
+ * 4. 监听车辆信号（车速、档位、电源），并实时驱动行车防分心引擎与电源状态机。
+ */
 object VehicleRepositoryImpl : VehicleRepository {
     private val scope = CoroutineScope(Dispatchers.Default)
 
+    /** 底层车辆属性服务提供者（双通道：Native AAOS 或 Mock Binder） */
     private var propertyProvider: com.oem.car.core.vehicleservice.VehiclePropertyProvider? = null
 
+    /** 车载服务连接状态通道 */
     private val _isConnected = MutableStateFlow(false)
     override val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
+    /** 各业务领域子系统实例（通过依赖注入容器获取） */
     private val uxEngine = VehicleServiceContainer.uxEngine
     private val powerManager = VehicleServiceContainer.powerManager
     private val audioDelegate = VehicleServiceContainer.audioDelegate
@@ -48,6 +62,7 @@ object VehicleRepositoryImpl : VehicleRepository {
     private val healthManager = VehicleServiceContainer.healthManager
     private val initialized = AtomicBoolean(false)
 
+    /** 信号流暴露代理 */
     override val speedSignal: StateFlow<CarSignal<Float>> = VehiclePropertyAdapter.speedSignal
     override val gearSignal: StateFlow<CarSignal<VehicleGear>> = VehiclePropertyAdapter.gearSignal
     override val powerSignal: StateFlow<CarSignal<PowerState>> = VehiclePropertyAdapter.powerSignal
@@ -63,12 +78,18 @@ object VehicleRepositoryImpl : VehicleRepository {
     override val vehicleHealthState: StateFlow<VehicleHealthState> = healthManager.state
     override val navigationPresets: List<NavigationDestination> = navigationManager.presets
 
+    /** 空调状态可变通道 */
     private val _climateState = MutableStateFlow(ClimateState())
     override val climateState: StateFlow<ClimateState> = _climateState.asStateFlow()
 
+    /** 驾驶模式可变通道 */
     private val _driveMode = MutableStateFlow(DriveMode.COMFORT)
     override val driveMode: StateFlow<DriveMode> = _driveMode.asStateFlow()
 
+    /**
+     * 初始化仓库。通过 AtomicBoolean 确保全局只执行一次。
+     * 负责启动 VehiclePropertyProvider 并建立信号监听流以驱动防分心和电源状态机。
+     */
     override fun initialize(context: Context) {
         if (!initialized.compareAndSet(false, true)) return
 
@@ -79,7 +100,7 @@ object VehicleRepositoryImpl : VehicleRepository {
         }
         provider.connect()
 
-        // Combine signals to drive safety rules and power states
+        // 监听车速与档位信号，实时驱动行车防分心安全引擎
         scope.launch {
             speedSignal.collect { speed ->
                 uxEngine.evaluate(speed.value, gearSignal.value.value)
@@ -90,6 +111,7 @@ object VehicleRepositoryImpl : VehicleRepository {
                 uxEngine.evaluate(speedSignal.value.value, gear.value)
             }
         }
+        // 监听电源状态，实时驱动电源生命周期管理
         scope.launch {
             powerSignal.collect { power ->
                 powerManager.onPowerStateChanged(power.value)
