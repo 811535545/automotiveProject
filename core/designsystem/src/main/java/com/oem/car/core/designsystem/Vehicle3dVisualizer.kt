@@ -173,15 +173,17 @@ fun Vehicle3dVisualizer(
         ) {
             Text(
                 text = "胎压: ${String.format(java.util.Locale.US, "%.1f", tirePressure)} bar (正常)",
+
                 color = CommonColors.White,
                 fontSize = 11.sp,
+
                 modifier = Modifier
                     .testTag("vehicle_3d_tire_pressure")
                     .padding(bottom = 2.dp)
+
             )
 
             val displayGearSpeed = gearText ?: if (speed > 0) "实时车速: ${speed.toInt()} km/h" else "车辆静止 P 档"
-
 
             Text(
                 text = displayGearSpeed,
@@ -190,6 +192,7 @@ fun Vehicle3dVisualizer(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.testTag("vehicle_3d_speed_gear")
             )
+
         }
     }
 }
