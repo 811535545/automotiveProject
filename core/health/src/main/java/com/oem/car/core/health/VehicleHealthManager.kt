@@ -12,12 +12,21 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/**
+ * ============================================================================
+ * 车辆健康诊断与 DTC 故障码管理器 (Vehicle Health & Diagnostics Manager)
+ * ============================================================================
+ *
+ * 【核心职责】
+ * 模拟全车系统诊断扫描（如制动、气囊、ESP、胎压）、UDS 诊断故障码 (DTC) 的扫描检索与清除。
+ */
 class VehicleHealthManager(private val scope: CoroutineScope) {
     private val _state = MutableStateFlow(VehicleHealthState())
     val state: StateFlow<VehicleHealthState> = _state.asStateFlow()
 
     private var scanJob: Job? = null
 
+    /** 启动车辆健康诊断扫描（模拟 1.5 秒后返回故障码） */
     fun scan() {
         if (_state.value.isScanning) return
         _state.update { it.copy(isScanning = true, lastScanResult = "正在扫描车辆健康...") }
@@ -36,6 +45,7 @@ class VehicleHealthManager(private val scope: CoroutineScope) {
         }
     }
 
+    /** 清空所有已存储的 DTC 故障码 */
     fun clearDtcs() {
         scanJob?.cancel()
         scanJob = null

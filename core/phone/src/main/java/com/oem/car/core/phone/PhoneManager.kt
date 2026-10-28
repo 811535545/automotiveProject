@@ -13,12 +13,22 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
+/**
+ * ============================================================================
+ * 蓝牙免提电话与通话状态机管理器 (Bluetooth Phone & Call Manager)
+ * ============================================================================
+ *
+ * 【核心职责】
+ * 管理蓝牙连接状态、通讯录联系人、呼出拨号状态机 (`DIALING ➔ ACTIVE`)、模拟来电 (`RINGING`)、
+ * 每秒通话计时、麦克风静音以及挂断控制。
+ */
 class PhoneManager(private val scope: CoroutineScope) {
     private val _state = MutableStateFlow(PhoneState())
     val state: StateFlow<PhoneState> = _state.asStateFlow()
 
     private var callJob: Job? = null
 
+    /** 切换蓝牙连接/断开状态 */
     fun toggleBluetooth() {
         if (_state.value.isBluetoothConnected) {
             endCall()
@@ -28,16 +38,19 @@ class PhoneManager(private val scope: CoroutineScope) {
         }
     }
 
+    /** 向指定联系人拨打电话 */
     fun dial(contact: Contact) {
         if (!_state.value.isBluetoothConnected) return
         startCall(contact, CallStatus.DIALING)
     }
 
+    /** 模拟收到外部来电 */
     fun simulateIncomingCall(contact: Contact) {
         if (!_state.value.isBluetoothConnected) return
         startCall(contact, CallStatus.RINGING)
     }
 
+    /** 内部逻辑：启动通话状态机 */
     private fun startCall(contact: Contact, status: CallStatus) {
         callJob?.cancel()
         _state.update {
@@ -53,6 +66,7 @@ class PhoneManager(private val scope: CoroutineScope) {
         }
     }
 
+    /** 接听外部来电 */
     fun answerCall() {
         if (_state.value.callStatus != CallStatus.RINGING) return
         callJob?.cancel()
@@ -60,6 +74,7 @@ class PhoneManager(private val scope: CoroutineScope) {
         callJob = scope.launch { runTimer() }
     }
 
+    /** 通话计时器协程（每秒自增 1 秒） */
     private suspend fun runTimer() {
         while (scope.isActive && _state.value.callStatus == CallStatus.ACTIVE) {
             delay(1000)
@@ -67,14 +82,17 @@ class PhoneManager(private val scope: CoroutineScope) {
         }
     }
 
+    /** 挂断电话 */
     fun hangUp() = endCall()
 
+    /** 切换通话麦克风静音状态 */
     fun toggleMute() {
         if (_state.value.callStatus == CallStatus.ACTIVE) {
             _state.update { it.copy(isMuted = !it.isMuted) }
         }
     }
 
+    /** 内部逻辑：结束通话并复位状态 */
     private fun endCall() {
         callJob?.cancel()
         callJob = null
