@@ -354,6 +354,8 @@ fun Vehicle3dVisualizerContent(
 
                     // Row 1: 前后左右 4 大灯开关
                     Text("💡 车灯控制 (前左 / 前右 / 后左 / 后右):", fontSize = 11.sp, color = Color.Gray)
+
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -388,6 +390,7 @@ fun Vehicle3dVisualizerContent(
 
                     // Row 2: 前排/后排 4 车门开关
                     Text("🚪 车门控制 (左前 / 右前 / 左后 / 右后):", fontSize = 11.sp, color = Color.Gray)
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
