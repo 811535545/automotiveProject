@@ -69,7 +69,7 @@ fun DashboardScreen(
                         speed = speedSignal.value,
                         isDoorLocked = true,
                         isDriving = gearSignal.value == VehicleGear.DRIVE && speedSignal.value > 0.5f,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxSize()
                     )
                 },
                 tertiaryContent = {
@@ -85,27 +85,31 @@ fun DashboardScreen(
                                 CarButton("P档 (0 km/h)", onClick = {
                                     viewModel.injectGear(VehicleGear.PARK)
                                     viewModel.injectSpeed(0f)
-                                })
+                                }, modifier = Modifier.weight(1f))
                                 CarButton("D档 (80 km/h)", onClick = {
                                     viewModel.injectGear(VehicleGear.DRIVE)
                                     viewModel.injectSpeed(80f)
-                                })
-                                CarButton("方向盘 PTT", onClick = { viewModel.triggerPtt() })
+                                }, modifier = Modifier.weight(1f))
+                                CarButton("方向盘 PTT", onClick = { viewModel.triggerPtt() }, modifier = Modifier.weight(1f))
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CarButton("STR 休眠", onClick = { viewModel.injectPower(PowerState.STR_SLEEP) })
-                                CarButton("唤醒运行", onClick = { viewModel.injectPower(PowerState.RUNNING) })
+                                CarButton("STR 休眠", onClick = { viewModel.injectPower(PowerState.STR_SLEEP) }, modifier = Modifier.weight(1f))
+                                CarButton("唤醒运行", onClick = { viewModel.injectPower(PowerState.RUNNING) }, modifier = Modifier.weight(1f))
                             }
                         }
 
-                        // Anti-distraction Card
+                        // Anti-distraction Card - Auto fill remaining height!
                         CarCard(
-                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
                             containerColor = if (uxRestriction.noVideo) Color(0xFF211111) else MaterialTheme.colorScheme.surface
                         ) {
                             Column(
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(vertical = 16.dp),
                                 verticalArrangement = Arrangement.Center,
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
